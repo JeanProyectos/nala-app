@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // ⚠️ IMPORTANTE: Cambia esta IP por la IP de tu computadora
 // En Windows: ipconfig (busca IPv4)
 // Ejemplo: "http://192.168.1.8:3000"
+// Si usas emulador Android en la misma PC, prueba con http://10.0.2.2:3000
+
 const API_URL = "http://192.168.1.8:3000";
 
 // Función helper para hacer requests con autenticación
@@ -67,14 +69,15 @@ async function apiRequest(endpoint, options = {}) {
 
 /**
  * Registra un nuevo usuario
+ * @param {string} name
  * @param {string} email 
  * @param {string} password 
  * @returns {Promise<{user: object, token: string}>}
  */
-export async function register(email, password) {
+export async function register(name, email, password) {
   const response = await apiRequest('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ name, email, password }),
   });
   
   // Guardar token
@@ -150,7 +153,7 @@ export async function getPet(id) {
 
 /**
  * Crea una nueva mascota
- * @param {object} petData - { name, species, age?, weight? }
+ * @param {object} petData - { name, type, breed? }
  * @returns {Promise<object>}
  */
 export async function createPet(petData) {
@@ -184,3 +187,59 @@ export async function deletePet(id) {
   });
 }
 
+// ============ PERMISSIONS ============
+
+/**
+ * Obtiene los permisos y menú según el rol del usuario
+ * @returns {Promise<{role: string, permissions: string[], menu: Array}>}
+ */
+export async function getPermissions() {
+  return await apiRequest('/users/permissions');
+}
+
+// ============ VACCINES ============
+
+/**
+ * Obtiene todas las vacunas de una mascota
+ * @param {number} petId 
+ * @returns {Promise<Array>}
+ */
+export async function getVaccinesByPet(petId) {
+  return await apiRequest(`/vaccines/pet/${petId}`);
+}
+
+/**
+ * Crea una nueva vacuna
+ * @param {object} vaccineData - { name, petId, appliedDate, nextDose?, observations? }
+ * @returns {Promise<object>}
+ */
+export async function createVaccine(vaccineData) {
+  return await apiRequest('/vaccines', {
+    method: 'POST',
+    body: JSON.stringify(vaccineData),
+  });
+}
+
+/**
+ * Actualiza una vacuna
+ * @param {number} id 
+ * @param {object} vaccineData 
+ * @returns {Promise<object>}
+ */
+export async function updateVaccine(id, vaccineData) {
+  return await apiRequest(`/vaccines/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(vaccineData),
+  });
+}
+
+/**
+ * Elimina una vacuna
+ * @param {number} id 
+ * @returns {Promise<object>}
+ */
+export async function deleteVaccine(id) {
+  return await apiRequest(`/vaccines/${id}`, {
+    method: 'DELETE',
+  });
+}

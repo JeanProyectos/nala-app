@@ -44,9 +44,9 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const signUp = async (email, password) => {
+  const signUp = async (name, email, password) => {
     try {
-      const response = await api.register(email, password);
+      const response = await api.register(name, email, password);
       setUser(response.user);
       setIsAuthenticated(true);
       return { success: true };

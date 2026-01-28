@@ -15,8 +15,7 @@ export default function MascotaScreen() {
   const [formData, setFormData] = useState({
     nombre: '',
     especie: 'Perro',
-    edad: '',
-    peso: '',
+    raza: '',
   });
   const [pets, setPets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -57,9 +56,8 @@ export default function MascotaScreen() {
     try {
       const petData = {
         name: formData.nombre,
-        species: formData.especie,
-        age: formData.edad ? parseInt(formData.edad) : undefined,
-        weight: formData.peso ? parseFloat(formData.peso) : undefined,
+        type: formData.especie,
+        breed: formData.raza || undefined,
       };
 
       await api.createPet(petData);
@@ -69,8 +67,7 @@ export default function MascotaScreen() {
       setFormData({
         nombre: '',
         especie: 'Perro',
-        edad: '',
-        peso: '',
+        raza: '',
       });
       
       // Recargar mascotas
@@ -131,24 +128,13 @@ export default function MascotaScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>Edad</Text>
+        <Text style={styles.label}>Raza (opcional)</Text>
         <TextInput
           style={styles.input}
-          value={formData.edad}
-          onChangeText={(value) => handleChange('edad', value)}
-          placeholder="Ej: 3"
+          value={formData.raza}
+          onChangeText={(value) => handleChange('raza', value)}
+          placeholder="Ej: Labrador"
           placeholderTextColor="#999"
-          keyboardType="numeric"
-        />
-
-        <Text style={styles.label}>Peso (kg)</Text>
-        <TextInput
-          style={styles.input}
-          value={formData.peso}
-          onChangeText={(value) => handleChange('peso', value)}
-          placeholder="Ej: 15.5"
-          placeholderTextColor="#999"
-          keyboardType="decimal-pad"
         />
 
         <TouchableOpacity
@@ -177,14 +163,11 @@ export default function MascotaScreen() {
             <View key={pet.id} style={styles.petCard}>
               <View style={styles.petHeader}>
                 <Text style={styles.petName}>{pet.name}</Text>
-                <Text style={styles.petSpecies}>{pet.species}</Text>
+                <Text style={styles.petSpecies}>{pet.type}</Text>
             </View>
               <View style={styles.petDetails}>
-                {pet.age && (
-                  <Text style={styles.petDetail}>Edad: {pet.age} años</Text>
-                )}
-                {pet.weight && (
-                  <Text style={styles.petDetail}>Peso: {pet.weight} kg</Text>
+                {pet.breed && (
+                  <Text style={styles.petDetail}>Raza: {pet.breed}</Text>
                 )}
             </View>
             </View>

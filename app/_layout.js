@@ -4,12 +4,15 @@ import { Text, View, ActivityIndicator } from 'react-native';
 import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { PermissionsProvider, usePermissions } from '../context/PermissionsContext';
 
 // Mantener la splash screen visible hasta que la app esté lista
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { menu, loading: permsLoading } = usePermissions();
+  const loading = authLoading || permsLoading;
 
   useEffect(() => {
     if (!loading) {
@@ -33,6 +36,11 @@ function RootLayoutNav() {
     );
   }
 
+  // Generar tabs dinámicamente basado en el menú de permisos
+  const getTabIcon = (iconEmoji) => {
+    return () => <Text style={{ fontSize: 24 }}>{iconEmoji || '•'}</Text>;
+  };
+
   return (
     <>
       <StatusBar style="auto" />
@@ -54,36 +62,25 @@ function RootLayoutNav() {
           },
         }}
       >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: 'Chat',
-            tabBarLabel: 'Chat',
-            tabBarIcon: ({ color }) => (
-              <TabBarIcon name="chatbubble-outline" color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="mascota"
-          options={{
-            title: 'Mascota',
-            tabBarLabel: 'Mascota',
-            tabBarIcon: ({ color }) => (
-              <TabBarIcon name="paw-outline" color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="perfil"
-          options={{
-            title: 'Perfil',
-            tabBarLabel: 'Perfil',
-            tabBarIcon: ({ color }) => (
-              <TabBarIcon name="person-outline" color={color} />
-            ),
-          }}
-        />
+        {/* Renderizar tabs dinámicamente desde el menú */}
+        {menu.map((item) => {
+          // Extraer el nombre de la ruta desde el path (ej: '/index' -> 'index')
+          const routeName = item.path.replace('/', '') || 'index';
+          
+          return (
+            <Tabs.Screen
+              key={item.id}
+              name={routeName}
+              options={{
+                title: item.label,
+                tabBarLabel: item.label,
+                tabBarIcon: ({ color }) => (
+                  <Text style={{ fontSize: 24, color }}>{item.icon || '•'}</Text>
+                ),
+              }}
+            />
+          );
+        })}
         <Tabs.Screen
           name="login"
           options={{
@@ -98,22 +95,10 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <PermissionsProvider>
+        <RootLayoutNav />
+      </PermissionsProvider>
     </AuthProvider>
   );
 }
 
-function TabBarIcon({ name, color }) {
-  return (
-    <Text style={{ fontSize: 24 }}>{getIconEmoji(name)}</Text>
-  );
-}
-
-function getIconEmoji(name) {
-  const icons = {
-    'chatbubble-outline': '💬',
-    'paw-outline': '🐾',
-    'person-outline': '👤',
-  };
-  return icons[name] || '•';
-}

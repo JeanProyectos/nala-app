@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 
 export default function LoginScreen() {
   const [isLogin, setIsLogin] = useState(true);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ export default function LoginScreen() {
   const router = useRouter();
 
   const handleSubmit = async () => {
-    if (!email.trim() || !password.trim()) {
+    if (!email.trim() || !password.trim() || (!isLogin && !name.trim())) {
       Alert.alert('Error', 'Por favor completa todos los campos');
       return;
     }
@@ -35,10 +36,10 @@ export default function LoginScreen() {
     try {
       const result = isLogin
         ? await signIn(email, password)
-        : await signUp(email, password);
+        : await signUp(name, email, password);
 
       if (result.success) {
-        router.replace('/');
+        router.replace('/index');
       } else {
         Alert.alert('Error', result.error || 'Ocurrió un error');
       }
@@ -59,6 +60,19 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.form}>
+        {!isLogin && (
+          <>
+            <Text style={styles.label}>Nombre</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Tu nombre"
+              placeholderTextColor="#999"
+            />
+          </>
+        )}
+
         <Text style={styles.label}>Email</Text>
         <TextInput
           style={styles.input}
