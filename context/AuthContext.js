@@ -44,12 +44,12 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const signUp = async (name, email, password) => {
+  const signUp = async (name, email, password, isVeterinarian = false) => {
     try {
-      const response = await api.register(name, email, password);
+      const response = await api.register(name, email, password, isVeterinarian);
       setUser(response.user);
       setIsAuthenticated(true);
-      return { success: true };
+      return { success: true, isVeterinarian: isVeterinarian };
     } catch (error) {
       return { success: false, error: error.message };
     }

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
-import * as api from '../services/api';
+import * as api from '../../../services/api';
 
 export default function MascotaScreen() {
   const [formData, setFormData] = useState({

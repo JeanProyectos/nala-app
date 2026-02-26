@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { PermissionsProvider, usePermissions } from '../context/PermissionsContext';
+import { NotificationsProvider } from '../context/NotificationsContext';
 
 // Mantener la splash screen visible hasta que la app esté lista
 SplashScreen.preventAutoHideAsync();
@@ -36,58 +37,17 @@ function RootLayoutNav() {
     );
   }
 
-  // Generar tabs dinámicamente basado en el menú de permisos
-  const getTabIcon = (iconEmoji) => {
-    return () => <Text style={{ fontSize: 24 }}>{iconEmoji || '•'}</Text>;
-  };
-
   return (
     <>
       <StatusBar style="auto" />
-      <Tabs
-        screenOptions={{
-          tabBarActiveTintColor: '#8B7FA8',
-          tabBarInactiveTintColor: '#C4C4C4',
-          headerStyle: {
-            backgroundColor: '#F8F8F8',
-          },
-          headerTintColor: '#333',
-          headerTitleStyle: {
-            fontWeight: '600',
-          },
-          tabBarStyle: {
-            backgroundColor: '#FFFFFF',
-            borderTopColor: '#E8E8E8',
-            borderTopWidth: 1,
-          },
-        }}
-      >
-        {/* Renderizar tabs dinámicamente desde el menú */}
-        {menu.map((item) => {
-          // Extraer el nombre de la ruta desde el path (ej: '/index' -> 'index')
-          const routeName = item.path.replace('/', '') || 'index';
-          
-          return (
-            <Tabs.Screen
-              key={item.id}
-              name={routeName}
-              options={{
-                title: item.label,
-                tabBarLabel: item.label,
-                tabBarIcon: ({ color }) => (
-                  <Text style={{ fontSize: 24, color }}>{item.icon || '•'}</Text>
-                ),
-              }}
-            />
-          );
-        })}
-        <Tabs.Screen
-          name="login"
-          options={{
-            href: null, // Ocultar de las tabs
-          }}
-        />
-      </Tabs>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="login" options={{ href: null }} />
+        <Stack.Screen name="veterinario-registro" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="veterinario/editar-perfil" options={{ title: 'Editar Perfil' }} />
+        <Stack.Screen name="admin/validar-veterinarios" options={{ title: 'Validar Veterinarios' }} />
+        <Stack.Screen name="admin/configurar-comision" options={{ title: 'Configurar Comisión' }} />
+      </Stack>
     </>
   );
 }
@@ -95,9 +55,11 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <PermissionsProvider>
-        <RootLayoutNav />
-      </PermissionsProvider>
+      <NotificationsProvider>
+        <PermissionsProvider>
+          <RootLayoutNav />
+        </PermissionsProvider>
+      </NotificationsProvider>
     </AuthProvider>
   );
 }

@@ -10,12 +10,13 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  SafeAreaView,
 } from 'react-native';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
-import * as api from '../services/api';
+import * as api from '../../services/api';
 
 const SPECIALTIES = {
   GENERAL: 'General',
@@ -95,7 +96,8 @@ export default function PerfilScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.profileHeader}>
         {veterinarianProfile?.profilePhoto ? (
           <Image
@@ -155,10 +157,21 @@ export default function PerfilScreen() {
             </View>
 
             <View style={styles.infoCard}>
-              <Text style={styles.infoLabel}>Precio por Consulta</Text>
+              <Text style={styles.infoLabel}>Precios por Consulta</Text>
               <Text style={styles.infoValue}>
-                ${veterinarianProfile.pricePerConsultation?.toFixed(2) || '0.00'}
+                💬 Chat: ${(veterinarianProfile.priceChat || 0).toFixed(2)}
               </Text>
+              <Text style={styles.infoValue}>
+                📞 Voz: ${(veterinarianProfile.priceVoice || 0).toFixed(2)}
+              </Text>
+              <Text style={styles.infoValue}>
+                📹 Video: ${(veterinarianProfile.priceVideo || 0).toFixed(2)}
+              </Text>
+              {!veterinarianProfile.priceChat && !veterinarianProfile.priceVoice && !veterinarianProfile.priceVideo && veterinarianProfile.pricePerConsultation && (
+                <Text style={styles.infoValue}>
+                  Precio: ${(veterinarianProfile.pricePerConsultation || 0).toFixed(2)}
+                </Text>
+              )}
             </View>
 
             <View style={styles.infoCard}>
@@ -195,6 +208,14 @@ export default function PerfilScreen() {
                   : 'Sin calificaciones aún'}
               </Text>
             </View>
+
+            {/* Botón de editar perfil */}
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => router.push('/veterinario/editar-perfil')}
+            >
+              <Text style={styles.editButtonText}>✏️ Editar Perfil</Text>
+            </TouchableOpacity>
           </>
         )}
 
@@ -240,6 +261,49 @@ export default function PerfilScreen() {
         </View>
       </View>
 
+      {/* Comunidad Veterinaria */}
+      <View style={styles.communitySection}>
+        <View style={styles.sectionTitle}>
+          <Text style={styles.sectionTitleText}>Comunidad</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.communityButton}
+          onPress={() => router.push('/community')}
+        >
+          <Text style={styles.communityButtonText}>👥 Comunidad Veterinaria</Text>
+          <Text style={styles.communityButtonSubtext}>
+            Comparte casos clínicos, discusiones y artículos
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Panel de Admin - Solo visible para ADMIN */}
+      {user?.role === 'ADMIN' && (
+        <View style={styles.adminSection}>
+          <View style={styles.sectionTitle}>
+            <Text style={styles.sectionTitleText}>Panel de Administración</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.adminButton}
+            onPress={() => router.push('/admin/validar-veterinarios')}
+          >
+            <Text style={styles.adminButtonText}>👨‍💼 Validar Veterinarios</Text>
+            <Text style={styles.adminButtonSubtext}>
+              Revisar y aprobar veterinarios pendientes
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.adminButton}
+            onPress={() => router.push('/admin/configurar-comision')}
+          >
+            <Text style={styles.adminButtonText}>💰 Configurar Comisión</Text>
+            <Text style={styles.adminButtonSubtext}>
+              Establecer porcentaje de comisión de la plataforma
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>Cerrar sesión</Text>
       </TouchableOpacity>
@@ -250,10 +314,15 @@ export default function PerfilScreen() {
         </Text>
       </View>
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -361,6 +430,39 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
   },
+  adminSection: {
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  adminButton: {
+    backgroundColor: '#8B7FA8',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  adminButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  adminButtonSubtext: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    opacity: 0.9,
+  },
+  editButton: {
+    backgroundColor: '#8B7FA8',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  editButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   logoutButton: {
     backgroundColor: '#FF5252',
     padding: 16,
@@ -372,5 +474,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  communitySection: {
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  communityButton: {
+    backgroundColor: '#4CAF50',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  communityButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  communityButtonSubtext: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    opacity: 0.9,
   },
 });

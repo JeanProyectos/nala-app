@@ -17,6 +17,7 @@ export default function LoginScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isVeterinarian, setIsVeterinarian] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, signUp } = useAuth();
   const router = useRouter();
@@ -34,14 +35,24 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const result = isLogin
-        ? await signIn(email, password)
-        : await signUp(name, email, password);
-
-      if (result.success) {
-        router.replace('/index');
+      if (isLogin) {
+        const result = await signIn(email, password);
+        if (!result.success) {
+          Alert.alert('Error', result.error || 'Ocurrió un error');
+        }
       } else {
-        Alert.alert('Error', result.error || 'Ocurrió un error');
+        // Registrar como veterinario si está marcado
+        const result = await signUp(name, email, password, isVeterinarian);
+        if (result.success) {
+          // Si es veterinario, redirigir a completar perfil
+          if (result.isVeterinarian) {
+            setTimeout(() => {
+              router.push('/veterinario-registro');
+            }, 1000);
+          }
+        } else {
+          Alert.alert('Error', result.error || 'Ocurrió un error');
+        }
       }
     } catch (error) {
       Alert.alert('Error', error.message || 'Ocurrió un error');
@@ -95,6 +106,18 @@ export default function LoginScreen() {
           secureTextEntry
           autoCapitalize="none"
         />
+
+        {!isLogin && (
+          <TouchableOpacity
+            style={styles.checkboxContainer}
+            onPress={() => setIsVeterinarian(!isVeterinarian)}
+          >
+            <View style={[styles.checkbox, isVeterinarian && styles.checkboxChecked]}>
+              {isVeterinarian && <Text style={styles.checkboxCheckmark}>✓</Text>}
+            </View>
+            <Text style={styles.checkboxLabel}>👨‍⚕️ Soy veterinario</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
@@ -191,6 +214,37 @@ const styles = StyleSheet.create({
   switchText: {
     color: '#8B7FA8',
     fontSize: 14,
+    fontWeight: '500',
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#8B7FA8',
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  checkboxChecked: {
+    backgroundColor: '#8B7FA8',
+    borderColor: '#8B7FA8',
+  },
+  checkboxCheckmark: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  checkboxLabel: {
+    fontSize: 15,
+    color: '#333',
     fontWeight: '500',
   },
 });

@@ -15,18 +15,28 @@ export function PermissionsProvider({ children }) {
   function getDefaultMenu(role) {
     const menus = {
       USER: [
-        { id: 'index', label: 'Chat', path: '/index', icon: '💬' },
+        { id: 'index', label: 'Inicio', path: '/index', icon: '🏠' },
+        { id: 'chat', label: 'Chat', path: '/chat', icon: '💬' },
         { id: 'mascota', label: 'Mis Mascotas', path: '/mascota', icon: '🐾' },
+        { id: 'veterinarios', label: 'Veterinarios', path: '/veterinarios', icon: '👨‍⚕️' },
+        { id: 'health', label: 'Historial de Salud', path: '/salud', icon: '💊' },
+        { id: 'reminders', label: 'Recordatorios', path: '/recordatorios', icon: '🔔' },
         { id: 'perfil', label: 'Mi Perfil', path: '/perfil', icon: '👤' },
       ],
       VET: [
-        { id: 'index', label: 'Chat', path: '/index', icon: '💬' },
-        { id: 'mascota', label: 'Mascotas Asignadas', path: '/mascota', icon: '🐾' },
+        { id: 'index', label: 'Inicio', path: '/index', icon: '🏠' },
+        { id: 'chat', label: 'Chat', path: '/chat', icon: '💬' },
+        { id: 'pacientes', label: 'Mis Pacientes', path: '/pacientes', icon: '👥' },
+        { id: 'mascota', label: 'Mis Mascotas', path: '/mascota', icon: '🐾' },
+        { id: 'health', label: 'Historial de Salud', path: '/salud', icon: '💊' },
+        { id: 'reminders', label: 'Recordatorios', path: '/recordatorios', icon: '🔔' },
         { id: 'perfil', label: 'Mi Perfil', path: '/perfil', icon: '👤' },
       ],
       ADMIN: [
-        { id: 'index', label: 'Chat', path: '/index', icon: '💬' },
+        { id: 'index', label: 'Inicio', path: '/index', icon: '🏠' },
         { id: 'mascota', label: 'Todas las Mascotas', path: '/mascota', icon: '🐾' },
+        { id: 'health', label: 'Historial de Salud', path: '/salud', icon: '💊' },
+        { id: 'reminders', label: 'Recordatorios', path: '/recordatorios', icon: '🔔' },
         { id: 'perfil', label: 'Mi Perfil', path: '/perfil', icon: '👤' },
       ],
     };
