@@ -4,7 +4,7 @@
     "slug": "nala",
     "version": "1.0.0",
     "orientation": "portrait",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -17,7 +17,11 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nala.app"
+      "bundleIdentifier": "com.nala.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Necesitamos acceso a la cámara para videollamadas con veterinarios",
+        "NSMicrophoneUsageDescription": "Necesitamos acceso al micrófono para llamadas de voz y videollamadas"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,14 +29,38 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.nala.app",
-      "newArchEnabled": false
+      "newArchEnabled": true,
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "INTERNET",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "scheme": "nala",
     "plugins": [
-      "expo-router"
-    ]
+      "expo-router",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Permitir acceso al micrófono para llamadas de voz y videollamadas",
+          "cameraPermission": "Permitir acceso a la cámara para videollamadas"
+        }
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7ad61771-8843-4944-8dfa-33624e575ffc"
+      },
+      "apiUrl": "https://nala-api.patasypelos.xyz"
+    }
   }
 }
