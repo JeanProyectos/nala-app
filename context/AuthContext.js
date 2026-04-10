@@ -18,14 +18,34 @@ export function AuthProvider({ children }) {
     try {
       const token = await AsyncStorage.getItem('token');
       if (token) {
-        // Intentar obtener el perfil del usuario
-        const profile = await api.getProfile();
-        setUser(profile);
-        setIsAuthenticated(true);
+        try {
+          // Intentar obtener el perfil del usuario
+          const profile = await api.getProfile();
+          setUser(profile);
+          setIsAuthenticated(true);
+        } catch (error) {
+          // Si hay error al obtener perfil, pero hay token, mantener autenticado
+          // El token podría ser válido pero el servidor no está disponible
+          console.warn('No se pudo verificar el perfil, pero hay token guardado:', error.message);
+          // No limpiar el token si es error de red - podría ser temporal
+          if (error.message.includes('Network') || error.message.includes('Failed to fetch') || error.message.includes('conectar')) {
+            // Error de red - mantener token pero marcar como no autenticado para que intente login
+            setIsAuthenticated(false);
+            setUser(null);
+          } else {
+            // Otro tipo de error - limpiar token
+            await AsyncStorage.removeItem('token');
+            setUser(null);
+            setIsAuthenticated(false);
+          }
+        }
+      } else {
+        setIsAuthenticated(false);
+        setUser(null);
       }
     } catch (error) {
-      // Si hay error, limpiar token
-      await AsyncStorage.removeItem('token');
+      // Error al leer AsyncStorage
+      console.error('Error leyendo token:', error);
       setUser(null);
       setIsAuthenticated(false);
     } finally {

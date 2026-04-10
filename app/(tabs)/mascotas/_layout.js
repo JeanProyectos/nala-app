@@ -1,13 +1,14 @@
 import { Stack } from 'expo-router';
+import { COLORS } from '../../../styles/theme';
 
 export default function MascotasLayout() {
   return (
     <Stack
       screenOptions={{
         headerStyle: {
-          backgroundColor: '#F8F8F8',
+          backgroundColor: COLORS.background,
         },
-        headerTintColor: '#333',
+        headerTintColor: COLORS.textPrimary,
         headerTitleStyle: {
           fontWeight: '600',
         },
@@ -17,6 +18,13 @@ export default function MascotasLayout() {
         name="index"
         options={{
           title: 'Mis Mascotas',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="editar"
+        options={{
+          title: 'Editar Mascota',
         }}
       />
     </Stack>

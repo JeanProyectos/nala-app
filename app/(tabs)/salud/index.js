@@ -3,18 +3,22 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
   Alert,
   ActivityIndicator,
   Modal,
   Platform,
+  TouchableOpacity,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../../services/api';
+import AnimatedButton from '../../../components/AnimatedButton';
+import AnimatedCard from '../../../components/AnimatedCard';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY } from '../../../styles/theme';
 
 const TABS = {
   VACCINES: 'VACCINES',
@@ -161,40 +165,81 @@ export default function SaludScreen() {
     }
   };
 
-  const openModal = (type) => {
+  const openModal = (type, item = null) => {
     setModalType(type);
-    // Inicializar formulario según el tipo
-    if (type === 'vaccine') {
-      setFormData({
-        name: '',
-        appliedDate: new Date().toISOString().split('T')[0],
-        nextDose: '',
-        veterinary: '',
-        observations: '',
-      });
-    } else if (type === 'deworming') {
-      setFormData({
-        type: 'INTERNAL',
-        product: '',
-        appliedDate: new Date().toISOString().split('T')[0],
-        nextDate: '',
-        observations: '',
-      });
-    } else if (type === 'allergy') {
-      setFormData({
-        type: 'FOOD',
-        description: '',
-        severity: 'MILD',
-      });
-    } else if (type === 'history') {
-      setFormData({
-        reason: '',
-        diagnosis: '',
-        treatment: '',
-        medications: '',
-        date: new Date().toISOString().split('T')[0],
-        veterinarian: '',
-      });
+    // Si hay un item, es edición; si no, es creación
+    if (item) {
+      // Cargar datos del item para edición
+      if (type === 'vaccine') {
+        setFormData({
+          id: item.id,
+          name: item.name || '',
+          appliedDate: item.appliedDate || new Date().toISOString().split('T')[0],
+          nextDose: item.nextDose || '',
+          veterinary: item.veterinary || '',
+          observations: item.observations || '',
+        });
+      } else if (type === 'deworming') {
+        setFormData({
+          id: item.id,
+          type: item.type || 'INTERNAL',
+          product: item.product || '',
+          appliedDate: item.appliedDate || new Date().toISOString().split('T')[0],
+          nextDate: item.nextDate || '',
+          observations: item.observations || '',
+        });
+      } else if (type === 'allergy') {
+        setFormData({
+          id: item.id,
+          type: item.type || 'FOOD',
+          description: item.description || '',
+          severity: item.severity || 'MILD',
+        });
+      } else if (type === 'history') {
+        setFormData({
+          id: item.id,
+          reason: item.reason || '',
+          diagnosis: item.diagnosis || '',
+          treatment: item.treatment || '',
+          medications: item.medications || '',
+          date: item.date || new Date().toISOString().split('T')[0],
+          veterinarian: item.veterinarian || '',
+        });
+      }
+    } else {
+      // Inicializar formulario vacío para creación
+      if (type === 'vaccine') {
+        setFormData({
+          name: '',
+          appliedDate: new Date().toISOString().split('T')[0],
+          nextDose: '',
+          veterinary: '',
+          observations: '',
+        });
+      } else if (type === 'deworming') {
+        setFormData({
+          type: 'INTERNAL',
+          product: '',
+          appliedDate: new Date().toISOString().split('T')[0],
+          nextDate: '',
+          observations: '',
+        });
+      } else if (type === 'allergy') {
+        setFormData({
+          type: 'FOOD',
+          description: '',
+          severity: 'MILD',
+        });
+      } else if (type === 'history') {
+        setFormData({
+          reason: '',
+          diagnosis: '',
+          treatment: '',
+          medications: '',
+          date: new Date().toISOString().split('T')[0],
+          veterinarian: '',
+        });
+      }
     }
     setShowModal(true);
   };
@@ -207,46 +252,91 @@ export default function SaludScreen() {
 
     setLoading(true);
     try {
+      const isEditing = formData.id !== undefined;
+
       if (modalType === 'vaccine') {
         if (!formData.name.trim()) {
           Alert.alert('Error', 'Por favor, ingresa el nombre de la vacuna');
           return;
         }
-        await api.createVaccine({
-          ...formData,
-          petId: selectedPet.id,
-        });
-        Alert.alert('Éxito', 'Vacuna registrada correctamente');
+        if (isEditing) {
+          await api.updateVaccine(formData.id, {
+            name: formData.name,
+            appliedDate: formData.appliedDate,
+            nextDose: formData.nextDose || undefined,
+            veterinary: formData.veterinary || undefined,
+            observations: formData.observations || undefined,
+          });
+          Alert.alert('Éxito', 'Vacuna actualizada correctamente');
+        } else {
+          await api.createVaccine({
+            ...formData,
+            petId: selectedPet.id,
+          });
+          Alert.alert('Éxito', 'Vacuna registrada correctamente');
+        }
       } else if (modalType === 'deworming') {
         if (!formData.product.trim()) {
           Alert.alert('Error', 'Por favor, ingresa el producto utilizado');
           return;
         }
-        await api.createDeworming({
-          ...formData,
-          petId: selectedPet.id,
-        });
-        Alert.alert('Éxito', 'Desparasitante registrado correctamente');
+        if (isEditing) {
+          await api.updateDeworming(formData.id, {
+            type: formData.type,
+            product: formData.product,
+            appliedDate: formData.appliedDate,
+            nextDate: formData.nextDate || undefined,
+            observations: formData.observations || undefined,
+          });
+          Alert.alert('Éxito', 'Desparasitante actualizado correctamente');
+        } else {
+          await api.createDeworming({
+            ...formData,
+            petId: selectedPet.id,
+          });
+          Alert.alert('Éxito', 'Desparasitante registrado correctamente');
+        }
       } else if (modalType === 'allergy') {
         if (!formData.description.trim()) {
           Alert.alert('Error', 'Por favor, ingresa la descripción de la alergia');
           return;
         }
-        await api.createAllergy({
-          ...formData,
-          petId: selectedPet.id,
-        });
-        Alert.alert('Éxito', 'Alergia registrada correctamente');
+        if (isEditing) {
+          await api.updateAllergy(formData.id, {
+            type: formData.type,
+            description: formData.description,
+            severity: formData.severity,
+          });
+          Alert.alert('Éxito', 'Alergia actualizada correctamente');
+        } else {
+          await api.createAllergy({
+            ...formData,
+            petId: selectedPet.id,
+          });
+          Alert.alert('Éxito', 'Alergia registrada correctamente');
+        }
       } else if (modalType === 'history') {
         if (!formData.reason.trim()) {
           Alert.alert('Error', 'Por favor, ingresa el motivo de la consulta');
           return;
         }
-        await api.createHealthHistory({
-          ...formData,
-          petId: selectedPet.id,
-        });
-        Alert.alert('Éxito', 'Registro de historial guardado correctamente');
+        if (isEditing) {
+          await api.updateHealthHistory(formData.id, {
+            reason: formData.reason,
+            diagnosis: formData.diagnosis || undefined,
+            treatment: formData.treatment || undefined,
+            medications: formData.medications || undefined,
+            date: formData.date,
+            veterinarian: formData.veterinarian || undefined,
+          });
+          Alert.alert('Éxito', 'Registro de historial actualizado correctamente');
+        } else {
+          await api.createHealthHistory({
+            ...formData,
+            petId: selectedPet.id,
+          });
+          Alert.alert('Éxito', 'Registro de historial guardado correctamente');
+        }
       }
 
       setShowModal(false);
@@ -256,6 +346,47 @@ export default function SaludScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDelete = (type, id, name) => {
+    const typeNames = {
+      vaccine: 'vacuna',
+      deworming: 'desparasitante',
+      allergy: 'alergia',
+      history: 'registro de historial',
+    };
+
+    Alert.alert(
+      'Eliminar registro',
+      `¿Estás seguro de que quieres eliminar este ${typeNames[type]}? Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              if (type === 'vaccine') {
+                await api.deleteVaccine(id);
+              } else if (type === 'deworming') {
+                await api.deleteDeworming(id);
+              } else if (type === 'allergy') {
+                await api.deleteAllergy(id);
+              } else if (type === 'history') {
+                await api.deleteHealthHistory(id);
+              }
+              Alert.alert('Éxito', 'Registro eliminado correctamente');
+              await loadAllData();
+            } catch (error) {
+              Alert.alert('Error', error.message || 'No se pudo eliminar el registro');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const formatDate = (dateString) => {
@@ -285,10 +416,26 @@ export default function SaludScreen() {
               <Text style={styles.emptyText}>No hay vacunas registradas</Text>
             ) : (
               vaccines.map((vaccine) => (
-                <View key={vaccine.id} style={styles.card}>
+                <AnimatedCard key={vaccine.id} style={styles.card}>
                   <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>{vaccine.name}</Text>
-                    <Text style={styles.cardDate}>{formatDate(vaccine.appliedDate)}</Text>
+                    <View style={styles.cardHeaderLeft}>
+                      <Text style={styles.cardTitle}>{vaccine.name}</Text>
+                      <Text style={styles.cardDate}>{formatDate(vaccine.appliedDate)}</Text>
+                    </View>
+                    <View style={styles.cardActions}>
+                      <AnimatedButton
+                        style={styles.editButton}
+                        onPress={() => openModal('vaccine', vaccine)}
+                      >
+                        <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={styles.deleteButton}
+                        onPress={() => handleDelete('vaccine', vaccine.id, vaccine.name)}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={COLORS.accentRed} />
+                      </AnimatedButton>
+                    </View>
                   </View>
                   {vaccine.veterinary && (
                     <Text style={styles.cardDetail}>Veterinaria: {vaccine.veterinary}</Text>
@@ -299,7 +446,7 @@ export default function SaludScreen() {
                   {vaccine.observations && (
                     <Text style={styles.cardObservations}>{vaccine.observations}</Text>
                   )}
-                </View>
+                </AnimatedCard>
               ))
             )}
           </View>
@@ -312,10 +459,26 @@ export default function SaludScreen() {
               <Text style={styles.emptyText}>No hay desparasitantes registrados</Text>
             ) : (
               dewormings.map((deworming) => (
-                <View key={deworming.id} style={styles.card}>
+                <AnimatedCard key={deworming.id} style={styles.card}>
                   <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>{deworming.product}</Text>
-                    <Text style={styles.cardDate}>{formatDate(deworming.appliedDate)}</Text>
+                    <View style={styles.cardHeaderLeft}>
+                      <Text style={styles.cardTitle}>{deworming.product}</Text>
+                      <Text style={styles.cardDate}>{formatDate(deworming.appliedDate)}</Text>
+                    </View>
+                    <View style={styles.cardActions}>
+                      <AnimatedButton
+                        style={styles.editButton}
+                        onPress={() => openModal('deworming', deworming)}
+                      >
+                        <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={styles.deleteButton}
+                        onPress={() => handleDelete('deworming', deworming.id, deworming.product)}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={COLORS.accentRed} />
+                      </AnimatedButton>
+                    </View>
                   </View>
                   <Text style={styles.cardDetail}>
                     Tipo: {deworming.type === 'INTERNAL' ? 'Interno' : 'Externo'}
@@ -326,7 +489,7 @@ export default function SaludScreen() {
                   {deworming.observations && (
                     <Text style={styles.cardObservations}>{deworming.observations}</Text>
                   )}
-                </View>
+                </AnimatedCard>
               ))
             )}
           </View>
@@ -339,17 +502,33 @@ export default function SaludScreen() {
               <Text style={styles.emptyText}>No hay alergias registradas</Text>
             ) : (
               allergies.map((allergy) => (
-                <View key={allergy.id} style={styles.card}>
+                <AnimatedCard key={allergy.id} style={styles.card}>
                   <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>
-                      {allergy.type === 'FOOD' ? 'Alimento' : allergy.type === 'ENVIRONMENTAL' ? 'Ambiental' : 'Medicamento'}
-                    </Text>
-                    <Text style={[styles.badge, styles[`badge${allergy.severity}`]]}>
-                      {allergy.severity === 'MILD' ? 'Leve' : allergy.severity === 'MODERATE' ? 'Moderado' : 'Grave'}
-                    </Text>
+                    <View style={styles.cardHeaderLeft}>
+                      <Text style={styles.cardTitle}>
+                        {allergy.type === 'FOOD' ? 'Alimento' : allergy.type === 'ENVIRONMENTAL' ? 'Ambiental' : 'Medicamento'}
+                      </Text>
+                      <Text style={[styles.badge, styles[`badge${allergy.severity}`]]}>
+                        {allergy.severity === 'MILD' ? 'Leve' : allergy.severity === 'MODERATE' ? 'Moderado' : 'Grave'}
+                      </Text>
+                    </View>
+                    <View style={styles.cardActions}>
+                      <AnimatedButton
+                        style={styles.editButton}
+                        onPress={() => openModal('allergy', allergy)}
+                      >
+                        <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={styles.deleteButton}
+                        onPress={() => handleDelete('allergy', allergy.id, 'alergia')}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={COLORS.accentRed} />
+                      </AnimatedButton>
+                    </View>
                   </View>
                   <Text style={styles.cardDetail}>{allergy.description}</Text>
-                </View>
+                </AnimatedCard>
               ))
             )}
           </View>
@@ -362,10 +541,26 @@ export default function SaludScreen() {
               <Text style={styles.emptyText}>No hay registros de historial</Text>
             ) : (
               healthHistory.map((record) => (
-                <View key={record.id} style={styles.card}>
+                <AnimatedCard key={record.id} style={styles.card}>
                   <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>{record.reason}</Text>
-                    <Text style={styles.cardDate}>{formatDate(record.date)}</Text>
+                    <View style={styles.cardHeaderLeft}>
+                      <Text style={styles.cardTitle}>{record.reason}</Text>
+                      <Text style={styles.cardDate}>{formatDate(record.date)}</Text>
+                    </View>
+                    <View style={styles.cardActions}>
+                      <AnimatedButton
+                        style={styles.editButton}
+                        onPress={() => openModal('history', record)}
+                      >
+                        <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+                      </AnimatedButton>
+                      <AnimatedButton
+                        style={styles.deleteButton}
+                        onPress={() => handleDelete('history', record.id, record.reason)}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={COLORS.accentRed} />
+                      </AnimatedButton>
+                    </View>
                   </View>
                   {record.veterinarian && (
                     <Text style={styles.cardDetail}>Veterinario: {record.veterinarian}</Text>
@@ -379,7 +574,7 @@ export default function SaludScreen() {
                   {record.medications && (
                     <Text style={styles.cardDetail}>Medicamentos: {record.medications}</Text>
                   )}
-                </View>
+                </AnimatedCard>
               ))
             )}
           </View>
@@ -403,10 +598,11 @@ export default function SaludScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
-              {modalType === 'vaccine' && 'Registrar Vacuna'}
-              {modalType === 'deworming' && 'Registrar Desparasitante'}
-              {modalType === 'allergy' && 'Registrar Alergia'}
-              {modalType === 'history' && 'Registrar en Historial'}
+              {formData.id !== undefined ? 'Editar' : 'Registrar'}{' '}
+              {modalType === 'vaccine' && 'Vacuna'}
+              {modalType === 'deworming' && 'Desparasitante'}
+              {modalType === 'allergy' && 'Alergia'}
+              {modalType === 'history' && 'Registro de Historial'}
             </Text>
 
             <ScrollView style={styles.modalScroll}>
@@ -640,23 +836,25 @@ export default function SaludScreen() {
             </ScrollView>
 
             <View style={styles.modalButtons}>
-              <TouchableOpacity
+              <AnimatedButton
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShowModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </AnimatedButton>
+              <AnimatedButton
                 style={[styles.modalButton, styles.saveButton, loading && styles.buttonDisabled]}
                 onPress={handleSave}
                 disabled={loading}
               >
                 {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={COLORS.textWhite} />
                 ) : (
-                  <Text style={styles.saveButtonText}>Guardar</Text>
+                  <Text style={styles.saveButtonText}>
+                    {formData.id !== undefined ? 'Guardar cambios' : 'Guardar'}
+                  </Text>
                 )}
-              </TouchableOpacity>
+              </AnimatedButton>
             </View>
           </View>
         </View>
@@ -675,7 +873,7 @@ export default function SaludScreen() {
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.petScroll}>
             {pets.map((pet) => (
-              <TouchableOpacity
+              <AnimatedButton
                 key={pet.id}
                 style={[
                   styles.petButton,
@@ -686,12 +884,12 @@ export default function SaludScreen() {
                 <Text
                   style={[
                     styles.petButtonText,
-                  selectedPet?.id === pet.id && styles.petButtonTextActive,
+                    selectedPet?.id === pet.id && styles.petButtonTextActive,
                   ]}
                 >
                   {pet.name}
                 </Text>
-              </TouchableOpacity>
+              </AnimatedButton>
             ))}
           </ScrollView>
         )}
@@ -706,7 +904,7 @@ export default function SaludScreen() {
             [TABS.ALLERGIES]: '⚠️ Alergias',
             [TABS.HISTORY]: '📋 Historial',
           }).map(([key, label]) => (
-            <TouchableOpacity
+            <AnimatedButton
               key={key}
               style={[styles.tab, activeTab === key && styles.tabActive]}
               onPress={() => setActiveTab(key)}
@@ -714,15 +912,15 @@ export default function SaludScreen() {
               <Text style={[styles.tabText, activeTab === key && styles.tabTextActive]}>
                 {label}
               </Text>
-            </TouchableOpacity>
+            </AnimatedButton>
           ))}
         </ScrollView>
-        <TouchableOpacity
+        <AnimatedButton
           style={styles.remindersButton}
           onPress={() => router.push('recordatorios')}
         >
           <Text style={styles.remindersButtonText}>🔔</Text>
-        </TouchableOpacity>
+        </AnimatedButton>
       </View>
 
       {/* Contenido */}
@@ -731,7 +929,7 @@ export default function SaludScreen() {
           <>
             {renderTabContent()}
             {/* Botón flotante */}
-            <TouchableOpacity
+            <AnimatedButton
               style={styles.fab}
               onPress={() => {
                 if (activeTab === TABS.VACCINES) openModal('vaccine');
@@ -741,7 +939,7 @@ export default function SaludScreen() {
               }}
             >
               <Text style={styles.fabText}>+</Text>
-            </TouchableOpacity>
+            </AnimatedButton>
           </>
         ) : (
           <Text style={styles.emptyText}>Selecciona una mascota</Text>
@@ -767,123 +965,148 @@ export default function SaludScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   petSelector: {
-    padding: 16,
-    backgroundColor: '#F8F8F8',
+    padding: SPACING.lg,
+    backgroundColor: COLORS.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: COLORS.border,
+    ...SHADOWS.sm,
   },
   petScroll: {
-    marginTop: 8,
+    marginTop: SPACING.sm,
   },
   petButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.background,
     borderWidth: 2,
-    borderColor: '#E0E0E0',
-    marginRight: 12,
+    borderColor: COLORS.border,
+    marginRight: SPACING.md,
   },
   petButtonActive: {
     backgroundColor: '#E8F5E9',
-    borderColor: '#8B7FA8',
+    borderColor: COLORS.primary,
   },
   petButtonText: {
-    fontSize: 15,
-    color: '#666',
+    ...TYPOGRAPHY.body,
     fontWeight: '500',
   },
   petButtonTextActive: {
-    color: '#8B7FA8',
+    color: COLORS.primary,
     fontWeight: '600',
   },
   tabsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#F8F8F8',
+    backgroundColor: COLORS.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: COLORS.border,
     alignItems: 'center',
+    ...SHADOWS.sm,
   },
   tabs: {
     flex: 1,
   },
   remindersButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderLeftWidth: 1,
-    borderLeftColor: '#E0E0E0',
+    borderLeftColor: COLORS.border,
   },
   remindersButtonText: {
     fontSize: 20,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: '#8B7FA8',
+    borderBottomColor: COLORS.primary,
   },
   tabText: {
-    fontSize: 12,
-    color: '#666',
+    ...TYPOGRAPHY.small,
     fontWeight: '500',
   },
   tabTextActive: {
-    color: '#8B7FA8',
+    color: COLORS.primary,
     fontWeight: '600',
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: SPACING.lg,
+    paddingBottom: 100, // Espacio para el tabBar
   },
   loadingContainer: {
-    padding: 40,
+    padding: SPACING.huge,
     alignItems: 'center',
   },
   emptyText: {
     textAlign: 'center',
-    color: '#999',
-    fontSize: 14,
-    padding: 40,
+    ...TYPOGRAPHY.caption,
+    padding: SPACING.huge,
   },
   card: {
-    backgroundColor: '#F0E6FF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.xl,
+    marginBottom: SPACING.md,
+    ...SHADOWS.md,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: SPACING.sm,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+  cardHeaderLeft: {
     flex: 1,
   },
+  cardActions: {
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    marginLeft: SPACING.sm,
+  },
+  editButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.backgroundTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.backgroundTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  cardTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    marginBottom: SPACING.xs,
+  },
   cardDate: {
-    fontSize: 14,
-    color: '#8B7FA8',
+    ...TYPOGRAPHY.small,
+    color: COLORS.primary,
     fontWeight: '500',
   },
   cardDetail: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+    ...TYPOGRAPHY.caption,
+    marginTop: SPACING.xs,
   },
   cardObservations: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 8,
+    ...TYPOGRAPHY.caption,
+    marginTop: SPACING.sm,
     fontStyle: 'italic',
   },
   badge: {
@@ -933,105 +1156,104 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xxl,
     width: '90%',
     maxHeight: '80%',
+    ...SHADOWS.xl,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 20,
+    ...TYPOGRAPHY.h4,
+    marginBottom: SPACING.xl,
   },
   modalScroll: {
     maxHeight: 400,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 16,
+    ...TYPOGRAPHY.bodyBold,
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.lg,
   },
   input: {
-    backgroundColor: '#F8F8F8',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
+    backgroundColor: COLORS.backgroundTertiary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    ...TYPOGRAPHY.body,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    color: '#333',
+    borderColor: COLORS.border,
+    minHeight: 52,
   },
   textArea: {
-    height: 80,
+    minHeight: 100,
     textAlignVertical: 'top',
   },
   pickerContainer: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
+    gap: SPACING.md,
+    marginTop: SPACING.sm,
   },
   optionButton: {
     flex: 1,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#F8F8F8',
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.backgroundTertiary,
     borderWidth: 2,
-    borderColor: '#E0E0E0',
+    borderColor: COLORS.border,
     alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
   },
   optionButtonActive: {
     backgroundColor: '#E8F5E9',
-    borderColor: '#8B7FA8',
+    borderColor: COLORS.primary,
   },
   optionText: {
-    fontSize: 15,
-    color: '#666',
+    ...TYPOGRAPHY.body,
     fontWeight: '500',
   },
   optionTextActive: {
-    color: '#8B7FA8',
+    color: COLORS.primary,
     fontWeight: '600',
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 24,
-    gap: 12,
+    marginTop: SPACING.xxl,
+    gap: SPACING.md,
   },
   modalButton: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
   },
   cancelButton: {
-    backgroundColor: '#F8F8F8',
+    backgroundColor: COLORS.backgroundTertiary,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   cancelButtonText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.textSecondary,
   },
   saveButton: {
-    backgroundColor: '#8B7FA8',
+    backgroundColor: COLORS.primary,
+    ...SHADOWS.sm,
   },
   saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.button,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   dateText: {
-    fontSize: 15,
-    color: '#333',
+    ...TYPOGRAPHY.body,
   },
   datePlaceholder: {
-    fontSize: 15,
-    color: '#999',
+    ...TYPOGRAPHY.body,
+    color: COLORS.textTertiary,
   },
 });

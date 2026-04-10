@@ -1,7 +1,11 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
+
   return (
     <Tabs
       screenOptions={{
@@ -18,13 +22,23 @@ export default function TabsLayout() {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#E8E8E8',
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: 60 + bottomInset,
+          paddingBottom: bottomInset,
           paddingTop: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
+          elevation: 8,
         },
+        tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '500',
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 4,
         },
       }}
     >
@@ -64,10 +78,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="consultar"
         options={{
-          title: 'Consultar',
-          tabBarLabel: 'Consultar',
+          title: 'Actividad',
+          tabBarLabel: 'Actividad',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubbles" size={size} color={color} />
+            <Ionicons name="time-outline" size={size} color={color} />
           ),
           headerShown: false,
         }}

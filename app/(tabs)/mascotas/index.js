@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
   Alert,
@@ -11,11 +11,16 @@ import {
   Image,
   Platform,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as api from '../../../services/api';
+import AnimatedButton from '../../../components/AnimatedButton';
+import AnimatedCard from '../../../components/AnimatedCard';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY, INPUT_STYLES, BUTTON_STYLES } from '../../../styles/theme';
 
 export default function MascotaScreen() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     nombre: '',
     tipo: 'Perro',
@@ -34,9 +39,15 @@ export default function MascotaScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   useEffect(() => {
-    loadPets();
     requestImagePermission();
   }, []);
+
+  // ✅ Refrescar mascotas cuando la pantalla recibe foco (después de editar)
+  useFocusEffect(
+    useCallback(() => {
+      loadPets();
+    }, [])
+  );
 
   const requestImagePermission = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -184,10 +195,39 @@ export default function MascotaScreen() {
     }
   };
 
+  const handleDeletePet = (petId, petName) => {
+    Alert.alert(
+      'Eliminar mascota',
+      `¿Estás seguro de que quieres eliminar a ${petName}? Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await api.deletePet(petId);
+              Alert.alert('Éxito', 'Mascota eliminada correctamente');
+              await loadPets();
+            } catch (error) {
+              Alert.alert('Error', error.message || 'No se pudo eliminar la mascota');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.formContainer}>
-        <Text style={styles.sectionTitle}>Registrar Nueva Mascota</Text>
+      <AnimatedCard style={styles.formContainer}>
+        <Text style={styles.sectionTitle}>Agregar nueva mascota</Text>
+        <Text style={styles.sectionSubtitle}>
+          Cuéntanos sobre tu compañero para un mejor seguimiento
+        </Text>
 
         {/* Foto */}
         <View style={styles.photoSection}>
@@ -195,46 +235,46 @@ export default function MascotaScreen() {
           {formData.foto ? (
             <View style={styles.photoPreview}>
               <Image source={{ uri: formData.foto }} style={styles.photoPreviewImage} />
-              <TouchableOpacity
+              <AnimatedButton
                 style={styles.removePhotoButton}
                 onPress={() => handleChange('foto', null)}
               >
                 <Text style={styles.removePhotoText}>✕</Text>
-              </TouchableOpacity>
+              </AnimatedButton>
             </View>
           ) : (
             <View style={styles.photoButtons}>
-              <TouchableOpacity
+              <AnimatedButton
                 style={styles.photoButton}
                 onPress={() => pickImage('camera')}
               >
                 <Text style={styles.photoButtonText}>📷 Cámara</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </AnimatedButton>
+              <AnimatedButton
                 style={styles.photoButton}
                 onPress={() => pickImage('gallery')}
               >
                 <Text style={styles.photoButtonText}>🖼️ Galería</Text>
-              </TouchableOpacity>
+              </AnimatedButton>
             </View>
           )}
         </View>
 
         {/* Nombre */}
-        <Text style={styles.label}>Nombre de la mascota *</Text>
+        <Text style={styles.label}>¿Cómo se llama tu mascota? *</Text>
         <TextInput
           style={styles.input}
           value={formData.nombre}
           onChangeText={(value) => handleChange('nombre', value)}
-          placeholder="Ej: Max"
-          placeholderTextColor="#999"
+          placeholder="Ej: Max, Luna, Toby..."
+          placeholderTextColor={COLORS.textTertiary}
         />
 
         {/* Tipo */}
         <Text style={styles.label}>Tipo *</Text>
         <View style={styles.pickerContainer}>
           {['Perro', 'Gato', 'Otro'].map((tipo) => (
-            <TouchableOpacity
+            <AnimatedButton
               key={tipo}
               style={[
                 styles.optionButton,
@@ -250,7 +290,7 @@ export default function MascotaScreen() {
               >
                 {tipo}
               </Text>
-            </TouchableOpacity>
+            </AnimatedButton>
           ))}
         </View>
 
@@ -272,7 +312,7 @@ export default function MascotaScreen() {
             { value: 'FEMALE', label: 'Hembra' },
             { value: 'UNKNOWN', label: 'Desconocido' },
           ].map((sexo) => (
-            <TouchableOpacity
+            <AnimatedButton
               key={sexo.value}
               style={[
                 styles.optionButton,
@@ -288,13 +328,13 @@ export default function MascotaScreen() {
               >
                 {sexo.label}
               </Text>
-            </TouchableOpacity>
+            </AnimatedButton>
           ))}
         </View>
 
         {/* Fecha de Nacimiento */}
         <Text style={styles.label}>Fecha de Nacimiento</Text>
-        <TouchableOpacity
+        <AnimatedButton
           style={styles.input}
           onPress={() => {
             if (formData.fechaNacimiento) {
@@ -312,7 +352,7 @@ export default function MascotaScreen() {
                 })
               : 'Seleccionar fecha'}
           </Text>
-        </TouchableOpacity>
+        </AnimatedButton>
         {showDatePicker && (
           <DateTimePicker
             value={selectedDate}
@@ -355,68 +395,84 @@ export default function MascotaScreen() {
         />
 
         {/* Botón Guardar */}
-        <TouchableOpacity
+        <AnimatedButton
           style={[styles.saveButton, (loading || uploadingPhoto) && styles.buttonDisabled]}
           onPress={handleSave}
           disabled={loading || uploadingPhoto}
         >
           {loading || uploadingPhoto ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={COLORS.textWhite} />
           ) : (
-            <Text style={styles.saveButtonText}>Guardar Mascota</Text>
+            <Text style={styles.saveButtonText}>Guardar información</Text>
           )}
-        </TouchableOpacity>
-      </View>
+        </AnimatedButton>
+      </AnimatedCard>
 
       {/* Lista de Mascotas */}
       <View style={styles.petsContainer}>
-        <Text style={styles.petsTitle}>Mis Mascotas</Text>
+        <Text style={styles.petsTitle}>Tus mascotas</Text>
         {loadingPets ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#8B7FA8" />
           </View>
         ) : pets.length === 0 ? (
-          <Text style={styles.emptyText}>No tienes mascotas registradas</Text>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Aún no has agregado mascotas</Text>
+            <Text style={styles.emptySubtext}>
+              Agrega tu primera mascota arriba para comenzar
+            </Text>
+          </View>
         ) : (
           pets.map((pet) => {
-            // Debug: verificar que la foto esté presente
-            console.log('Pet data:', { id: pet.id, name: pet.name, photo: pet.photo });
             return (
-            <View key={pet.id} style={styles.petCard}>
-              {pet.photo ? (
-                <Image 
-                  source={{ uri: pet.photo }} 
-                  style={styles.petPhoto}
-                  onError={(error) => {
-                    console.error('Error cargando imagen:', error.nativeEvent.error, 'URL:', pet.photo);
-                  }}
-                  onLoad={() => {
-                    console.log('Imagen cargada correctamente:', pet.photo);
-                  }}
-                />
-              ) : (
-                <View style={[styles.petPhoto, { backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' }]}>
-                  <Text style={{ fontSize: 24 }}>🐾</Text>
-                </View>
-              )}
-              <View style={styles.petInfo}>
-                <View style={styles.petHeader}>
-                  <Text style={styles.petName}>{pet.name}</Text>
-                  <Text style={styles.petSpecies}>{pet.type}</Text>
-                </View>
-                <View style={styles.petDetails}>
-                  {pet.breed && (
-                    <Text style={styles.petDetail}>Raza: {pet.breed}</Text>
-                  )}
-                  {pet.color && (
-                    <Text style={styles.petDetail}>Color: {pet.color}</Text>
-                  )}
-                  {pet.weight && (
-                    <Text style={styles.petDetail}>Peso: {pet.weight} kg</Text>
-                  )}
+            <AnimatedCard key={pet.id} style={styles.petCard}>
+              <View style={styles.petCardContent}>
+                {pet.photo ? (
+                  <Image 
+                    source={{ uri: pet.photo }} 
+                    style={styles.petPhoto}
+                    onError={(error) => {
+                      console.error('Error cargando imagen:', error.nativeEvent.error, 'URL:', pet.photo);
+                    }}
+                  />
+                ) : (
+                  <View style={[styles.petPhoto, { backgroundColor: COLORS.border, justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ fontSize: 28 }}>🐾</Text>
+                  </View>
+                )}
+                <View style={styles.petInfo}>
+                  <View style={styles.petHeader}>
+                    <Text style={styles.petName}>{pet.name}</Text>
+                    <Text style={styles.petSpecies}>{pet.type}</Text>
+                  </View>
+                  <View style={styles.petDetails}>
+                    {pet.breed && (
+                      <Text style={styles.petDetail}>Raza: {pet.breed}</Text>
+                    )}
+                    {pet.color && (
+                      <Text style={styles.petDetail}>Color: {pet.color}</Text>
+                    )}
+                    {pet.weight && (
+                      <Text style={styles.petDetail}>Peso: {pet.weight} kg</Text>
+                    )}
+                  </View>
                 </View>
               </View>
-            </View>
+              <View style={styles.petActions}>
+                <AnimatedButton
+                  style={styles.editPetButton}
+                  onPress={() => router.push(`/mascotas/editar?id=${pet.id}`)}
+                >
+                  <Text style={styles.editPetButtonText}>Editar</Text>
+                </AnimatedButton>
+                <AnimatedButton
+                  style={styles.deletePetButton}
+                  onPress={() => handleDeletePet(pet.id, pet.name)}
+                >
+                  <Text style={styles.deletePetButtonText}>Eliminar</Text>
+                </AnimatedButton>
+              </View>
+            </AnimatedCard>
             );
           })
         )}
@@ -428,48 +484,59 @@ export default function MascotaScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   content: {
-    padding: 20,
+    padding: SPACING.xl,
+    paddingBottom: SPACING.xxxl + 80, // Espacio para el tabBar
   },
   formContainer: {
-    marginBottom: 30,
+    marginBottom: SPACING.xxxl,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xxl,
+    ...SHADOWS.lg,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 20,
+    ...TYPOGRAPHY.h4,
+    marginBottom: SPACING.xs,
+  },
+  sectionSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xl,
+    lineHeight: 18,
   },
   photoSection: {
-    marginBottom: 20,
+    marginBottom: SPACING.xl,
   },
   photoButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACING.md,
   },
   photoButton: {
     flex: 1,
-    backgroundColor: '#F8F8F8',
-    padding: 14,
-    borderRadius: 12,
+    backgroundColor: COLORS.backgroundTertiary,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#E0E0E0',
+    borderColor: COLORS.border,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   photoButtonText: {
-    fontSize: 15,
-    color: '#666',
+    ...TYPOGRAPHY.body,
     fontWeight: '500',
   },
   photoPreview: {
     position: 'relative',
-    width: 150,
-    height: 150,
-    borderRadius: 12,
+    width: 160,
+    height: 160,
+    borderRadius: BORDER_RADIUS.lg,
     overflow: 'hidden',
     alignSelf: 'center',
+    ...SHADOWS.md,
   },
   photoPreviewImage: {
     width: '100%',
@@ -477,108 +544,109 @@ const styles = StyleSheet.create({
   },
   removePhotoButton: {
     position: 'absolute',
-    top: 5,
-    right: 5,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 15,
-    width: 30,
-    height: 30,
+    top: SPACING.sm,
+    right: SPACING.sm,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: BORDER_RADIUS.round,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   removePhotoText: {
-    color: '#FFFFFF',
-    fontSize: 18,
+    color: COLORS.textWhite,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 16,
+    ...TYPOGRAPHY.bodyBold,
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.lg,
   },
   input: {
-    backgroundColor: '#F8F8F8',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    color: '#333',
+    ...INPUT_STYLES.default,
+    justifyContent: 'center',
   },
   pickerContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACING.md,
   },
   optionButton: {
     flex: 1,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#F8F8F8',
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.backgroundTertiary,
     borderWidth: 2,
-    borderColor: '#E0E0E0',
+    borderColor: COLORS.border,
     alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
   },
   optionButtonActive: {
     backgroundColor: '#E8F5E9',
-    borderColor: '#8B7FA8',
+    borderColor: COLORS.primary,
   },
   optionText: {
-    fontSize: 15,
-    color: '#666',
+    ...TYPOGRAPHY.body,
     fontWeight: '500',
   },
   optionTextActive: {
-    color: '#8B7FA8',
+    color: COLORS.primary,
     fontWeight: '600',
   },
   saveButton: {
-    backgroundColor: '#8B7FA8',
-    padding: 16,
-    borderRadius: 12,
+    ...BUTTON_STYLES.primary,
     alignItems: 'center',
-    marginTop: 24,
+    justifyContent: 'center',
+    marginTop: SPACING.xxl,
   },
   saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.button,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   petsContainer: {
-    marginTop: 30,
+    marginTop: SPACING.xxxl,
   },
   petsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
+    ...TYPOGRAPHY.h4,
+    marginBottom: SPACING.lg,
   },
   loadingContainer: {
-    padding: 20,
+    padding: SPACING.xl,
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    padding: SPACING.xl,
     alignItems: 'center',
   },
   emptyText: {
     textAlign: 'center',
-    color: '#999',
-    fontSize: 14,
-    padding: 20,
+    ...TYPOGRAPHY.body,
+    marginBottom: SPACING.xs,
+  },
+  emptySubtext: {
+    textAlign: 'center',
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
   },
   petCard: {
-    backgroundColor: '#F0E6FF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.xl,
+    marginBottom: SPACING.md,
+    ...SHADOWS.sm,
+  },
+  petCardContent: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACING.md,
+    marginBottom: SPACING.md,
   },
   petPhoto: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+    width: 72,
+    height: 72,
+    borderRadius: BORDER_RADIUS.md,
   },
   petInfo: {
     flex: 1,
@@ -587,31 +655,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   petName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    ...TYPOGRAPHY.h4,
   },
   petSpecies: {
-    fontSize: 14,
-    color: '#8B7FA8',
-    fontWeight: '500',
+    ...TYPOGRAPHY.captionBold,
+    color: COLORS.primary,
   },
   petDetails: {
-    gap: 4,
+    gap: SPACING.xs,
   },
   petDetail: {
-    fontSize: 14,
-    color: '#666',
+    ...TYPOGRAPHY.caption,
+  },
+  petActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    paddingTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  editPetButton: {
+    flex: 1,
+    backgroundColor: COLORS.primary,
+    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.sm,
+  },
+  editPetButtonText: {
+    ...TYPOGRAPHY.captionBold,
+    color: COLORS.textWhite,
+  },
+  deletePetButton: {
+    flex: 1,
+    backgroundColor: COLORS.accentRed,
+    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.sm,
+  },
+  deletePetButtonText: {
+    ...TYPOGRAPHY.captionBold,
+    color: COLORS.textWhite,
   },
   dateText: {
-    fontSize: 15,
-    color: '#333',
+    ...TYPOGRAPHY.body,
   },
   datePlaceholder: {
-    fontSize: 15,
-    color: '#999',
+    ...TYPOGRAPHY.body,
+    color: COLORS.textTertiary,
   },
 });

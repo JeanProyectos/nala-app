@@ -56,12 +56,21 @@ export function PermissionsProvider({ children }) {
   const loadPermissions = async () => {
     try {
       setLoading(true);
-      const data = await api.getPermissions();
-      setPermissions(data);
-      setMenu(data.menu || getDefaultMenu(data.role || 'USER'));
+      try {
+        const data = await api.getPermissions();
+        setPermissions(data);
+        setMenu(data.menu || getDefaultMenu(data.role || 'USER'));
+      } catch (error) {
+        console.warn('Error cargando permisos (usando valores por defecto):', error.message);
+        // Si falla, usar menú por defecto según el rol del usuario
+        const defaultRole = user?.role || 'USER';
+        const defaultPermissions = { role: defaultRole, permissions: [], menu: getDefaultMenu(defaultRole) };
+        setPermissions(defaultPermissions);
+        setMenu(defaultPermissions.menu);
+      }
     } catch (error) {
-      console.error('Error cargando permisos:', error);
-      // Si falla, usar menú por defecto según el rol del usuario
+      // Error crítico - usar valores por defecto
+      console.error('Error crítico cargando permisos:', error);
       const defaultRole = user?.role || 'USER';
       const defaultPermissions = { role: defaultRole, permissions: [], menu: getDefaultMenu(defaultRole) };
       setPermissions(defaultPermissions);

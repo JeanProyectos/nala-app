@@ -22,7 +22,12 @@ export function NotificationsProvider({ children }) {
 
   useEffect(() => {
     if (isAuthenticated) {
-      registerForPushNotifications();
+      // Usar setTimeout para evitar que bloquee la inicialización
+      setTimeout(() => {
+        registerForPushNotifications().catch(error => {
+          console.warn('Error al registrar notificaciones (no crítico):', error.message);
+        });
+      }, 1000);
     }
   }, [isAuthenticated]);
 
@@ -66,27 +71,44 @@ export function NotificationsProvider({ children }) {
       }
 
       // Obtener el token
-      // Intentar obtener projectId de Constants si está disponible
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-      
+      // Para desarrollo local, usar el experienceId o intentar sin projectId
       let token;
       try {
+        // Intentar obtener projectId de Constants si está disponible
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+        const experienceId = Constants.expoConfig?.slug || Constants.manifest?.slug;
+        
         if (projectId) {
           token = await Notifications.getExpoPushTokenAsync({
             projectId: projectId,
           });
+        } else if (experienceId) {
+          // Usar experienceId como alternativa para desarrollo
+          token = await Notifications.getExpoPushTokenAsync({
+            experienceId: experienceId,
+          });
         } else {
-          // Intentar sin projectId (funciona en desarrollo con Expo Go)
+          // Intentar sin parámetros (funciona en Expo Go)
           token = await Notifications.getExpoPushTokenAsync();
         }
       } catch (tokenError) {
-        // Si el error es sobre projectId, solo mostrar warning (no crítico en desarrollo)
-        if (tokenError.message?.includes('projectId')) {
-          console.warn('⚠️ Notificaciones push no disponibles: projectId no configurado. Esto es normal en desarrollo local.');
-          setLoading(false);
-          return;
+        // Si el error es sobre projectId, intentar con experiencia local
+        if (tokenError.message?.includes('projectId') || tokenError.message?.includes('experienceId')) {
+          try {
+            // Último intento: usar experiencia local
+            const experienceId = `@${Constants.expoConfig?.owner || 'anonymous'}/${Constants.expoConfig?.slug || 'nala'}`;
+            token = await Notifications.getExpoPushTokenAsync({
+              experienceId: experienceId,
+            });
+          } catch (fallbackError) {
+            console.warn('⚠️ Notificaciones push no disponibles en desarrollo local. Funcionarán notificaciones locales.');
+            // Continuar sin token push - las notificaciones locales seguirán funcionando
+            setLoading(false);
+            return;
+          }
+        } else {
+          throw tokenError;
         }
-        throw tokenError;
       }
 
       setExpoPushToken(token.data);

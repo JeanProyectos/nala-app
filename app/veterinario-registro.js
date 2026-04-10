@@ -136,7 +136,7 @@ export default function VeterinarioRegistroScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.replace('/index'),
+            onPress: () => router.replace('/(tabs)/inicio'),
           },
         ]
       );

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
   Alert,
@@ -11,6 +10,9 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'expo-router';
+import AnimatedButton from '../components/AnimatedButton';
+import AnimatedCard from '../components/AnimatedCard';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY, INPUT_STYLES, BUTTON_STYLES } from '../styles/theme';
 
 export default function LoginScreen() {
   const [isLogin, setIsLogin] = useState(true);
@@ -66,85 +68,89 @@ export default function LoginScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>🐾 NALA</Text>
         <Text style={styles.subtitle}>
-          {isLogin ? 'Inicia sesión' : 'Crea tu cuenta'}
+          {isLogin 
+            ? 'Bienvenido de vuelta' 
+            : 'Comienza a cuidar mejor a tu mascota'}
         </Text>
       </View>
 
-      <View style={styles.form}>
-        {!isLogin && (
-          <>
-            <Text style={styles.label}>Nombre</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Tu nombre"
-              placeholderTextColor="#999"
-            />
-          </>
-        )}
-
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          placeholder="tu@email.com"
-          placeholderTextColor="#999"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoComplete="email"
-        />
-
-        <Text style={styles.label}>Contraseña</Text>
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Mínimo 6 caracteres"
-          placeholderTextColor="#999"
-          secureTextEntry
-          autoCapitalize="none"
-        />
-
-        {!isLogin && (
-          <TouchableOpacity
-            style={styles.checkboxContainer}
-            onPress={() => setIsVeterinarian(!isVeterinarian)}
-          >
-            <View style={[styles.checkbox, isVeterinarian && styles.checkboxChecked]}>
-              {isVeterinarian && <Text style={styles.checkboxCheckmark}>✓</Text>}
-            </View>
-            <Text style={styles.checkboxLabel}>👨‍⚕️ Soy veterinario</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>
-              {isLogin ? 'Iniciar sesión' : 'Registrarse'}
-            </Text>
+      <AnimatedCard style={styles.formCard}>
+        <View style={styles.form}>
+          {!isLogin && (
+            <>
+              <Text style={styles.label}>Nombre</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="Tu nombre"
+                placeholderTextColor={COLORS.textTertiary}
+              />
+            </>
           )}
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.switchButton}
-          onPress={() => setIsLogin(!isLogin)}
-          disabled={loading}
-        >
-          <Text style={styles.switchText}>
-            {isLogin
-              ? '¿No tienes cuenta? Regístrate'
-              : '¿Ya tienes cuenta? Inicia sesión'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            placeholder="tu@email.com"
+            placeholderTextColor={COLORS.textTertiary}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+          />
+
+          <Text style={styles.label}>Contraseña</Text>
+          <TextInput
+            style={styles.input}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Al menos 6 caracteres"
+            placeholderTextColor={COLORS.textTertiary}
+            secureTextEntry
+            autoCapitalize="none"
+          />
+
+          {!isLogin && (
+            <AnimatedButton
+              style={styles.checkboxContainer}
+              onPress={() => setIsVeterinarian(!isVeterinarian)}
+            >
+              <View style={[styles.checkbox, isVeterinarian && styles.checkboxChecked]}>
+                {isVeterinarian && <Text style={styles.checkboxCheckmark}>✓</Text>}
+              </View>
+              <Text style={styles.checkboxLabel}>👨‍⚕️ Soy veterinario</Text>
+            </AnimatedButton>
+          )}
+
+          <AnimatedButton
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={COLORS.textWhite} />
+            ) : (
+              <Text style={styles.buttonText}>
+                {isLogin ? 'Iniciar sesión' : 'Registrarse'}
+              </Text>
+            )}
+          </AnimatedButton>
+
+          <AnimatedButton
+            style={styles.switchButton}
+            onPress={() => setIsLogin(!isLogin)}
+            disabled={loading}
+          >
+            <Text style={styles.switchText}>
+              {isLogin
+                ? '¿Primera vez? Crea tu cuenta'
+                : '¿Ya tienes cuenta? Inicia sesión'}
+            </Text>
+          </AnimatedButton>
+        </View>
+      </AnimatedCard>
     </ScrollView>
   );
 }
@@ -152,99 +158,95 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   content: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: SPACING.xl,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: SPACING.xxxl,
+    paddingTop: SPACING.xxxl,
   },
   title: {
+    ...TYPOGRAPHY.h1,
     fontSize: 48,
-    fontWeight: 'bold',
-    color: '#8B7FA8',
-    marginBottom: 8,
+    color: COLORS.primary,
+    marginBottom: SPACING.sm,
   },
   subtitle: {
+    ...TYPOGRAPHY.body,
     fontSize: 18,
-    color: '#666',
+    color: COLORS.textSecondary,
+  },
+  formCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xxl,
+    ...SHADOWS.lg,
   },
   form: {
     width: '100%',
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 16,
+    ...TYPOGRAPHY.bodyBold,
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.lg,
   },
   input: {
-    backgroundColor: '#F8F8F8',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    color: '#333',
+    ...INPUT_STYLES.default,
   },
   button: {
-    backgroundColor: '#8B7FA8',
-    padding: 16,
-    borderRadius: 12,
+    ...BUTTON_STYLES.primary,
     alignItems: 'center',
-    marginTop: 24,
+    justifyContent: 'center',
+    marginTop: SPACING.xxl,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.button,
   },
   switchButton: {
-    marginTop: 20,
+    marginTop: SPACING.xl,
     alignItems: 'center',
+    paddingVertical: SPACING.md,
   },
   switchText: {
-    color: '#8B7FA8',
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.captionBold,
+    color: COLORS.primary,
   },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
-    paddingVertical: 8,
+    marginTop: SPACING.lg,
+    paddingVertical: SPACING.sm,
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: 28,
+    height: 28,
+    borderRadius: BORDER_RADIUS.sm,
     borderWidth: 2,
-    borderColor: '#8B7FA8',
-    marginRight: 12,
+    borderColor: COLORS.primary,
+    marginRight: SPACING.md,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.background,
   },
   checkboxChecked: {
-    backgroundColor: '#8B7FA8',
-    borderColor: '#8B7FA8',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   checkboxCheckmark: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: COLORS.textWhite,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   checkboxLabel: {
-    fontSize: 15,
-    color: '#333',
+    ...TYPOGRAPHY.body,
     fontWeight: '500',
   },
 });

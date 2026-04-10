@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
   Image,
@@ -13,12 +12,17 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../services/api';
+import AnimatedButton from '../../components/AnimatedButton';
+import AnimatedCard from '../../components/AnimatedCard';
+import RunningPetsBanner from '../../components/RunningPetsBanner';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY } from '../../styles/theme';
 
 export default function InicioScreen() {
   const router = useRouter();
   const [pets, setPets] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [vaccines, setVaccines] = useState([]);
+  const [consultations, setConsultations] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -30,13 +34,15 @@ export default function InicioScreen() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [petsData, remindersData] = await Promise.all([
+      const [petsData, remindersData, consultationsData] = await Promise.all([
         api.getPets(),
         api.getReminders('PENDING'),
+        api.getMyConsultations(),
       ]);
 
       setPets(petsData);
       setReminders(remindersData);
+      setConsultations(Array.isArray(consultationsData) ? consultationsData : []);
 
       // Obtener próxima vacuna de la primera mascota
       if (petsData.length > 0) {
@@ -80,6 +86,26 @@ export default function InicioScreen() {
   const mainPet = pets.length > 0 ? pets[0] : null;
   const nextReminder = getNextReminder();
   const nextVaccine = vaccines.length > 0 ? vaccines[0] : null;
+  const activeConsultation = consultations
+    .filter((consultation) =>
+      ['PENDING_PAYMENT', 'PENDING_APPROVAL', 'IN_PROGRESS', 'PAID'].includes(consultation.status)
+    )
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+
+  const getConsultationStatusLabel = (status) => {
+    switch (status) {
+      case 'PENDING_PAYMENT':
+        return 'Pago pendiente';
+      case 'PENDING_APPROVAL':
+        return 'Esperando respuesta del veterinario';
+      case 'IN_PROGRESS':
+        return 'En curso';
+      case 'PAID':
+        return 'Lista para continuar';
+      default:
+        return 'Activa';
+    }
+  };
 
   if (loading) {
     return (
@@ -91,139 +117,173 @@ export default function InicioScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>🐾 NALA</Text>
-        <Text style={styles.headerSubtitle}>Bienvenido de vuelta</Text>
+      {activeConsultation ? (
+        <AnimatedCard
+          style={styles.activeConsultationCard}
+          onPress={() => router.push(`/consultar/consulta-chat?id=${activeConsultation.id}`)}
+        >
+          <View style={styles.activeConsultationHeader}>
+            <View style={styles.activeConsultationCopy}>
+              <Text style={styles.activeConsultationEyebrow}>Consulta activa</Text>
+              <Text style={styles.activeConsultationTitle}>
+                {activeConsultation.type === 'CHAT' && 'Continua tu chat con el veterinario'}
+                {activeConsultation.type === 'VOICE' && 'Continua tu llamada con el veterinario'}
+                {activeConsultation.type === 'VIDEO' && 'Continua tu videollamada'}
+              </Text>
+              <Text style={styles.activeConsultationSubtitle}>
+                {getConsultationStatusLabel(activeConsultation.status)}
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward-circle" size={28} color={COLORS.primary} />
+          </View>
+        </AnimatedCard>
+      ) : null}
+
+      <View style={styles.heroSection}>
+        <View style={styles.heroBadge}>
+          <Ionicons name="medkit-outline" size={16} color={COLORS.primary} />
+          <Text style={styles.heroBadgeText}>Consulta veterinaria</Text>
+        </View>
+        <Text style={styles.heroTitle}>Habla con un veterinario en pocos pasos</Text>
+        <Text style={styles.heroSubtitle}>
+          Solicita una consulta cuando necesites orientacion para tu mascota.
+          Elige el tipo de ayuda y comienza rapidamente.
+        </Text>
+        <AnimatedButton
+          style={styles.heroPrimaryButton}
+          onPress={() => router.push('/consultar')}
+        >
+          <View style={styles.heroPrimaryButtonContent}>
+            <View style={styles.heroPrimaryButtonIcon}>
+              <Ionicons name="chatbubbles" size={24} color={COLORS.textWhite} />
+            </View>
+            <View style={styles.heroPrimaryButtonText}>
+              <Text style={styles.heroPrimaryButtonTitle}>Solicitar consulta</Text>
+              <Text style={styles.heroPrimaryButtonSubtitle}>
+                Chat, voz o video
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="arrow-forward" size={22} color={COLORS.textWhite} />
+        </AnimatedButton>
+
+        <AnimatedButton
+          style={styles.heroSecondaryButton}
+          onPress={() => router.push('/mascotas')}
+        >
+          <Ionicons name="paw-outline" size={18} color={COLORS.textSecondary} />
+          <Text style={styles.heroSecondaryButtonText}>Ver mis mascotas</Text>
+        </AnimatedButton>
       </View>
 
-      {/* Mascota Principal */}
-      {mainPet ? (
-        <TouchableOpacity
-          style={styles.mainPetCard}
-          onPress={() => router.push('/mascotas')}
-        >
-          <View style={styles.petHeader}>
-            {mainPet.photo ? (
-              <Image source={{ uri: mainPet.photo }} style={styles.petPhoto} />
-            ) : (
-              <View style={styles.petPhotoPlaceholder}>
-                <Text style={styles.petPhotoIcon}>🐾</Text>
+      <View style={styles.secondarySection}>
+        <Text style={styles.secondarySectionTitle}>Informacion util</Text>
+
+        {mainPet ? (
+          <AnimatedCard
+            style={styles.petCard}
+            onPress={() => router.push('/mascotas')}
+          >
+            <View style={styles.petHeader}>
+              {mainPet.photo ? (
+                <Image source={{ uri: mainPet.photo }} style={styles.petPhoto} />
+              ) : (
+                <View style={styles.petPhotoPlaceholder}>
+                  <Text style={styles.petPhotoIcon}>🐾</Text>
+                </View>
+              )}
+              <View style={styles.petInfo}>
+                <Text style={styles.petLabel}>Mascota principal</Text>
+                <Text style={styles.petName}>{mainPet.name}</Text>
               </View>
-            )}
-            <View style={styles.petInfo}>
-              <Text style={styles.petName}>{mainPet.name}</Text>
-              <Text style={styles.petType}>{mainPet.type}</Text>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
             </View>
-            <Ionicons name="chevron-forward" size={24} color="#8B7FA8" />
-          </View>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={styles.addPetCard}
-          onPress={() => router.push('/mascotas')}
-        >
-          <Ionicons name="add-circle-outline" size={48} color="#8B7FA8" />
-          <Text style={styles.addPetText}>Registra tu primera mascota</Text>
-        </TouchableOpacity>
-      )}
+          </AnimatedCard>
+        ) : (
+          <AnimatedCard
+            style={styles.addPetCard}
+            onPress={() => router.push('/mascotas')}
+          >
+            <Ionicons name="add-circle-outline" size={32} color={COLORS.primary} />
+            <Text style={styles.addPetText}>Agrega tu primera mascota</Text>
+            <Text style={styles.addPetSubtext}>Opcional, pero te ayudara a consultar mas rapido</Text>
+          </AnimatedCard>
+        )}
 
-      {/* Próximo Recordatorio */}
-      {nextReminder && (
-        <TouchableOpacity
-          style={styles.reminderCard}
-          onPress={() => router.push('/salud')}
-        >
-          <View style={styles.reminderIcon}>
-            <Ionicons name="notifications" size={24} color="#FF9800" />
-          </View>
-          <View style={styles.reminderInfo}>
-            <Text style={styles.reminderTitle}>Próximo Recordatorio</Text>
-            <Text style={styles.reminderText} numberOfLines={2}>
-              {nextReminder.title}
-            </Text>
-            <Text style={styles.reminderDate}>
-              {formatDate(nextReminder.scheduledAt)}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#999" />
-        </TouchableOpacity>
-      )}
+        {(nextReminder || nextVaccine) && (
+          <View style={styles.supportCards}>
+            {nextReminder && (
+              <AnimatedCard
+                style={styles.supportCard}
+                onPress={() => router.push('/salud')}
+              >
+                <View style={styles.supportCardIcon}>
+                  <Ionicons name="notifications-outline" size={20} color={COLORS.textSecondary} />
+                </View>
+                <View style={styles.supportCardInfo}>
+                  <Text style={styles.supportCardLabel}>Proximo recordatorio</Text>
+                  <Text style={styles.supportCardText} numberOfLines={2}>
+                    {nextReminder.title}
+                  </Text>
+                </View>
+                <Text style={styles.supportCardDate}>
+                  {formatDate(nextReminder.scheduledAt)}
+                </Text>
+              </AnimatedCard>
+            )}
 
-      {/* Próxima Vacuna */}
-      {nextVaccine && (
-        <TouchableOpacity
-          style={styles.vaccineCard}
-          onPress={() => router.push('/salud')}
-        >
-          <View style={styles.vaccineIcon}>
-            <Ionicons name="medical" size={24} color="#4CAF50" />
-          </View>
-          <View style={styles.vaccineInfo}>
-            <Text style={styles.vaccineTitle}>Próxima Vacuna</Text>
-            <Text style={styles.vaccineText} numberOfLines={2}>
-              {nextVaccine.name}
-            </Text>
-            {nextVaccine.nextDose && (
-              <Text style={styles.vaccineDate}>
-                {formatDate(nextVaccine.nextDose)}
-              </Text>
+            {nextVaccine && (
+              <AnimatedCard
+                style={styles.supportCard}
+                onPress={() => router.push('/salud')}
+              >
+                <View style={styles.supportCardIcon}>
+                  <Ionicons name="medical-outline" size={20} color={COLORS.textSecondary} />
+                </View>
+                <View style={styles.supportCardInfo}>
+                  <Text style={styles.supportCardLabel}>Proxima vacuna</Text>
+                  <Text style={styles.supportCardText} numberOfLines={2}>
+                    {nextVaccine.name}
+                  </Text>
+                </View>
+                <Text style={styles.supportCardDate}>
+                  {nextVaccine.nextDose ? formatDate(nextVaccine.nextDose) : ''}
+                </Text>
+              </AnimatedCard>
             )}
           </View>
-          <Ionicons name="chevron-forward" size={20} color="#999" />
-        </TouchableOpacity>
-      )}
+        )}
+      </View>
 
-      {/* Botón Rápido: Consultar Veterinario */}
-      <TouchableOpacity
-        style={styles.consultButton}
-        onPress={() => router.push('/consultar')}
-      >
-        <View style={styles.consultButtonContent}>
-          <Ionicons name="chatbubbles" size={32} color="#FFFFFF" />
-          <View style={styles.consultButtonText}>
-            <Text style={styles.consultButtonTitle}>Consultar Veterinario</Text>
-            <Text style={styles.consultButtonSubtitle}>
-              Obtén ayuda profesional ahora
-            </Text>
-          </View>
-        </View>
-        <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
-      </TouchableOpacity>
-
-      {/* Accesos Rápidos */}
       <View style={styles.quickActions}>
-        <Text style={styles.sectionTitle}>Accesos Rápidos</Text>
+        <Text style={styles.quickActionsTitle}>Herramientas</Text>
         <View style={styles.quickActionsGrid}>
-          <TouchableOpacity
+          <AnimatedCard
             style={styles.quickActionCard}
             onPress={() => router.push('/mascotas')}
           >
-            <Ionicons name="paw" size={32} color="#8B7FA8" />
-            <Text style={styles.quickActionText}>Mis Mascotas</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+            <Ionicons name="paw-outline" size={24} color={COLORS.textSecondary} />
+            <Text style={styles.quickActionText}>Mascotas</Text>
+          </AnimatedCard>
+          <AnimatedCard
             style={styles.quickActionCard}
             onPress={() => router.push('/salud')}
           >
-            <Ionicons name="medical" size={32} color="#8B7FA8" />
-            <Text style={styles.quickActionText}>Historial de Salud</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.quickActionCard}
-            onPress={() => router.push('/consultar')}
-          >
-            <Ionicons name="chatbubbles" size={32} color="#8B7FA8" />
-            <Text style={styles.quickActionText}>Veterinarios</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+            <Ionicons name="medical-outline" size={24} color={COLORS.textSecondary} />
+            <Text style={styles.quickActionText}>Historial</Text>
+          </AnimatedCard>
+          <AnimatedCard
             style={styles.quickActionCard}
             onPress={() => router.push('/perfil')}
           >
-            <Ionicons name="settings" size={32} color="#8B7FA8" />
-            <Text style={styles.quickActionText}>Configuración</Text>
-          </TouchableOpacity>
+            <Ionicons name="settings-outline" size={24} color={COLORS.textSecondary} />
+            <Text style={styles.quickActionText}>Ajustes</Text>
+          </AnimatedCard>
         </View>
+      </View>
+
+      <View style={styles.bannerSection}>
+        <RunningPetsBanner />
       </View>
     </ScrollView>
   );
@@ -232,216 +292,272 @@ export default function InicioScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xxxl + SPACING.lg,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    marginBottom: 24,
-    paddingTop: 16,
+  heroSection: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xxl + SPACING.xs,
+    marginBottom: SPACING.xxl,
+    ...SHADOWS.md,
   },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#8B7FA8',
-    marginBottom: 4,
+  activeConsultationCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+    ...SHADOWS.sm,
   },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#666',
+  activeConsultationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  mainPetCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  activeConsultationCopy: {
+    flex: 1,
+    marginRight: SPACING.md,
+  },
+  activeConsultationEyebrow: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.primary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.xs / 2,
+  },
+  activeConsultationTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs / 2,
+  },
+  activeConsultationSubtitle: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.textSecondary,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.round,
+    marginBottom: SPACING.lg,
+  },
+  heroBadgeText: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  heroTitle: {
+    ...TYPOGRAPHY.h2,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  heroSubtitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    lineHeight: 22,
+    marginBottom: SPACING.xl,
+  },
+  heroPrimaryButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xl + SPACING.xs,
+    marginBottom: SPACING.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    ...SHADOWS.lg,
+  },
+  heroPrimaryButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  heroPrimaryButtonIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  heroPrimaryButtonText: {
+    flex: 1,
+  },
+  heroPrimaryButtonTitle: {
+    ...TYPOGRAPHY.h4,
+    color: COLORS.textWhite,
+    marginBottom: SPACING.xs / 2,
+  },
+  heroPrimaryButtonSubtitle: {
+    ...TYPOGRAPHY.small,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  heroSecondaryButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.backgroundTertiary,
+  },
+  heroSecondaryButtonText: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  petCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   petHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   petPhoto: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginRight: 12,
+    width: 56,
+    height: 56,
+    borderRadius: BORDER_RADIUS.round,
+    marginRight: SPACING.md,
   },
   petPhotoPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#F0E6FF',
+    width: 56,
+    height: 56,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.backgroundTertiary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   petPhotoIcon: {
-    fontSize: 30,
+    fontSize: 28,
   },
   petInfo: {
     flex: 1,
   },
-  petName: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+  petLabel: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs / 2,
   },
-  petType: {
-    fontSize: 14,
-    color: '#666',
+  petName: {
+    ...TYPOGRAPHY.bodyBold,
   },
   addPetCard: {
-    backgroundColor: '#F0E6FF',
-    borderRadius: 16,
-    padding: 32,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
     alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#E0D0FF',
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     borderStyle: 'dashed',
   },
   addPetText: {
-    fontSize: 16,
-    color: '#8B7FA8',
-    marginTop: 12,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    marginTop: SPACING.sm,
   },
-  reminderCard: {
-    backgroundColor: '#FFF9E6',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+  addPetSubtext: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs / 2,
+  },
+  secondarySection: {
+    marginBottom: SPACING.xl,
+  },
+  secondarySectionTitle: {
+    ...TYPOGRAPHY.captionBold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.md,
+  },
+  supportCards: {
+    gap: SPACING.sm,
+  },
+  supportCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
     flexDirection: 'row',
     alignItems: 'center',
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9800',
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  reminderIcon: {
-    marginRight: 12,
+  supportCardIcon: {
+    marginRight: SPACING.md,
   },
-  reminderInfo: {
+  supportCardInfo: {
     flex: 1,
   },
-  reminderTitle: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
+  supportCardLabel: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs / 2,
   },
-  reminderText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+  supportCardText: {
+    ...TYPOGRAPHY.body,
   },
-  reminderDate: {
-    fontSize: 12,
-    color: '#FF9800',
-    fontWeight: '500',
-  },
-  vaccineCard: {
-    backgroundColor: '#E8F5E9',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
-  },
-  vaccineIcon: {
-    marginRight: 12,
-  },
-  vaccineInfo: {
-    flex: 1,
-  },
-  vaccineTitle: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  vaccineText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  vaccineDate: {
-    fontSize: 12,
-    color: '#4CAF50',
-    fontWeight: '500',
-  },
-  consultButton: {
-    backgroundColor: '#8B7FA8',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  consultButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  consultButtonText: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  consultButtonTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  consultButtonSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+  supportCardDate: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.textSecondary,
+    marginLeft: SPACING.md,
   },
   quickActions: {
-    marginTop: 8,
+    marginTop: SPACING.md,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
+  quickActionsTitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: SPACING.sm,
   },
   quickActionCard: {
-    width: '47%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
+    width: '31%',
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   quickActionText: {
-    fontSize: 14,
-    color: '#333',
-    marginTop: 8,
-    fontWeight: '500',
+    ...TYPOGRAPHY.small,
+    marginTop: SPACING.xs,
     textAlign: 'center',
+    color: COLORS.textSecondary,
+  },
+  bannerSection: {
+    marginTop: SPACING.xl,
+    opacity: 0.9,
   },
 });

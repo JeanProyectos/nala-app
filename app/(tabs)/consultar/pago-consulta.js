@@ -23,6 +23,16 @@ export default function PagoConsultaScreen() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState(null);
+  const [successMessageShown, setSuccessMessageShown] = useState(false);
+
+  const canPayConsultation = (data) => {
+    if (!data) {
+      return false;
+    }
+
+    const payableStatuses = ['PENDING_PAYMENT', 'PENDING_APPROVAL', 'IN_PROGRESS', 'FINISHED'];
+    return payableStatuses.includes(data.status) && data.payment?.status !== 'APPROVED';
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -30,29 +40,44 @@ export default function PagoConsultaScreen() {
     }, [consultationId])
   );
 
+  useEffect(() => {
+    if (!checkoutUrl || consultation?.payment?.status === 'APPROVED' || consultation?.status === 'PAID') {
+      return undefined;
+    }
+
+    const interval = setInterval(() => {
+      loadConsultation();
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [checkoutUrl, consultation?.payment?.status, consultation?.status]);
+
   const loadConsultation = async () => {
     try {
       setLoading(true);
       const data = await api.getConsultation(consultationId);
       setConsultation(data);
 
-      // Si está en progreso o pagada, redirigir al chat
-      if (data.status === 'IN_PROGRESS' || data.status === 'PAID') {
-        router.replace(`consulta-chat?id=${consultationId}`);
+      if ((data.payment?.status === 'APPROVED' || data.status === 'PAID') && !successMessageShown) {
+        setSuccessMessageShown(true);
+        Alert.alert(
+          'Pago exitoso',
+          'Tu pago fue aprobado. Ya puedes continuar con la consulta.',
+        );
+      }
+
+      // Si está rechazada, mostrar mensaje
+      if (data.status === 'REJECTED') {
+        Alert.alert(
+          'Consulta Rechazada',
+          'El veterinario ha rechazado esta consulta. No puedes realizar el pago.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
         return;
       }
 
-      // Si está finalizada y no pagada, mostrar opción de pago
-      if (data.status === 'FINISHED' && (!data.payment || data.payment.status !== 'APPROVED')) {
-        // Consulta finalizada, necesita pago
-        return;
-      }
-
-      // Si hay un pago pendiente, obtener el checkout URL
-      if (data.payment && data.payment.status === 'PENDING') {
-        // Ya hay un pago creado, podríamos obtener el URL del pago
-        // Por ahora, crear uno nuevo
-        await createPayment();
+      if (canPayConsultation(data) && !checkoutUrl) {
+        await createPayment(false);
       }
     } catch (error) {
       console.error('Error cargando consulta:', error);
@@ -63,18 +88,24 @@ export default function PagoConsultaScreen() {
     }
   };
 
-  const createPayment = async () => {
+  const createPayment = async (shouldOpenCheckout = true) => {
     try {
       setProcessing(true);
       
-      // URL de redirección después del pago
-      const redirectUrl = `exp://192.168.20.53:8081/--/consultation/${consultationId}/payment-callback`;
+      const redirectUrl = `nala://consultar/pago-consulta?id=${consultationId}`;
       
+      console.log('💳 Creando pago para consulta:', consultationId);
       const result = await api.createPayment(consultationId, redirectUrl);
+      
+      console.log('✅ Pago creado:', result);
+      
+      if (!result || !result.checkoutUrl) {
+        throw new Error('No se recibió la URL de pago del servidor');
+      }
+      
       setCheckoutUrl(result.checkoutUrl);
       
-      // Abrir el checkout de Wompi
-      if (result.checkoutUrl) {
+      if (shouldOpenCheckout) {
         const canOpen = await Linking.canOpenURL(result.checkoutUrl);
         if (canOpen) {
           await Linking.openURL(result.checkoutUrl);
@@ -85,7 +116,6 @@ export default function PagoConsultaScreen() {
             [
               { text: 'OK' },
               { text: 'Copiar', onPress: () => {
-                // En React Native necesitarías un módulo de clipboard
                 Alert.alert('URL copiada', result.checkoutUrl);
               }},
             ]
@@ -93,8 +123,9 @@ export default function PagoConsultaScreen() {
         }
       }
     } catch (error) {
-      console.error('Error creando pago:', error);
-      Alert.alert('Error', error.message || 'No se pudo crear el pago');
+      console.error('❌ Error creando pago:', error);
+      const errorMessage = error.message || error.error || 'No se pudo crear el pago';
+      Alert.alert('Error', errorMessage);
     } finally {
       setProcessing(false);
     }
@@ -106,6 +137,33 @@ export default function PagoConsultaScreen() {
 
   const handleCheckStatus = async () => {
     await loadConsultation();
+  };
+
+  const handleDeclinePayment = async () => {
+    Alert.alert(
+      'Finalizar sin pagar',
+      'Si decides no pagar, la consulta se cerrará y se notificará al veterinario. Esta acción no se puede deshacer.',
+      [
+        { text: 'Volver', style: 'cancel' },
+        {
+          text: 'No pagar y finalizar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setProcessing(true);
+              await api.finishConsultation(consultationId, false, { reason: 'USER_DECLINED_PAYMENT' });
+              Alert.alert('Consulta finalizada', 'La consulta se cerró sin pago.', [
+                { text: 'OK', onPress: () => router.replace('/(tabs)/consultar/pacientes') },
+              ]);
+            } catch (error) {
+              Alert.alert('Error', error.message || 'No se pudo finalizar la consulta');
+            } finally {
+              setProcessing(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -165,15 +223,21 @@ export default function PagoConsultaScreen() {
       <View style={styles.statusCard}>
         <Text style={styles.statusLabel}>Estado</Text>
         <Text style={styles.statusValue}>
+          {consultation.payment?.status === 'APPROVED'
+            ? '✅ Pago aprobado'
+            : null}
           {consultation.status === 'PENDING_PAYMENT' && '⏳ Pendiente de Pago'}
+          {consultation.status === 'PENDING_APPROVAL' && '⏳ Pendiente de Aprobación - Puedes Pagar'}
+          {consultation.status === 'IN_PROGRESS' && consultation.payment?.status !== 'APPROVED' && '💳 Consulta en curso - Pago requerido para continuar'}
           {consultation.status === 'PAID' && '✅ Pagada'}
           {consultation.status === 'IN_PROGRESS' && '🟢 En Progreso'}
           {consultation.status === 'FINISHED' && '✅ Finalizada - Pendiente de Pago'}
+          {consultation.status === 'REJECTED' && '❌ Rechazada'}
           {consultation.status === 'EXPIRED' && '❌ Expirada'}
         </Text>
       </View>
 
-      {(consultation.status === 'PENDING_PAYMENT' || consultation.status === 'FINISHED') && (
+      {canPayConsultation(consultation) && (
         <>
           <TouchableOpacity
             style={[styles.payButton, processing && styles.payButtonDisabled]}
@@ -186,7 +250,7 @@ export default function PagoConsultaScreen() {
               <>
                 <Text style={styles.payButtonText}>💳 Pagar Ahora</Text>
                 <Text style={styles.payButtonSubtext}>
-                  Serás redirigido a Wompi para completar el pago
+                  Serás redirigido a Mercado Pago para completar el pago
                 </Text>
               </>
             )}
@@ -202,22 +266,46 @@ export default function PagoConsultaScreen() {
               </Text>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            style={[styles.cancelConsultationButton, processing && styles.payButtonDisabled]}
+            onPress={handleDeclinePayment}
+            disabled={processing}
+          >
+            <Text style={styles.cancelConsultationButtonText}>❌ No pagar y finalizar consulta</Text>
+          </TouchableOpacity>
         </>
       )}
 
-      {consultation.status === 'PAID' && (
+      {(consultation.payment?.status === 'APPROVED' || consultation.status === 'PAID') && (
+        <View style={styles.successBox}>
+          <Text style={styles.successText}>
+            ✅ Tu pago fue aprobado. Ya puedes continuar con la consulta.
+          </Text>
+        </View>
+      )}
+
+      {(consultation.payment?.status === 'APPROVED' || consultation.status === 'PAID') && (
         <TouchableOpacity
           style={styles.chatButton}
           onPress={() => router.replace(`consulta-chat?id=${consultationId}`)}
         >
-          <Text style={styles.chatButtonText}>💬 Ir al Chat</Text>
+          <Text style={styles.chatButtonText}>
+            {consultation.status === 'IN_PROGRESS' ? '💬 Continuar Consulta' : '💬 Ir al Chat'}
+          </Text>
         </TouchableOpacity>
       )}
 
-      {consultation.status === 'PENDING_PAYMENT' && (
+      {(consultation.status === 'PENDING_PAYMENT' ||
+        consultation.status === 'PENDING_APPROVAL' ||
+        consultation.status === 'IN_PROGRESS') && (
         <View style={styles.warningBox}>
           <Text style={styles.warningText}>
-            ⚠️ La consulta expirará en 30 minutos si no se completa el pago
+            {consultation.status === 'PENDING_APPROVAL' 
+              ? '💡 Puedes pagar ahora. El veterinario aprobará la consulta después del pago.'
+              : consultation.status === 'IN_PROGRESS'
+                ? '⚠️ Ya inició la consulta. Si no pagas, no podrás seguir escribiendo ni continuar la llamada.'
+                : '⚠️ La consulta expirará en 30 minutos si no se completa el pago'}
           </Text>
         </View>
       )}
@@ -368,6 +456,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  successBox: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  successText: {
+    fontSize: 15,
+    color: '#2E7D32',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   chatButton: {
     backgroundColor: '#8B7FA8',
     borderRadius: 12,
@@ -392,5 +494,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#856404',
     lineHeight: 20,
+  },
+  cancelConsultationButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E53935',
+    marginBottom: 12,
+  },
+  cancelConsultationButtonText: {
+    color: '#E53935',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

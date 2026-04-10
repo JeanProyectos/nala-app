@@ -16,3 +16,17 @@ web-build/
 
 # Temporary files
 *.log
+
+# Artefactos locales de export / diagnóstico
+.expo-export-check/
+.expo-export-check-2/
+.expo-export-check-calls/
+.expo-export-check-payment-notify/
+build-log-*.txt
+eas-log-*.txt
+eas-*-*.txt
+
+# Android / build local
+android/app/debug.keystore
+android/apk_build_now.err
+android/apk_build_now.out

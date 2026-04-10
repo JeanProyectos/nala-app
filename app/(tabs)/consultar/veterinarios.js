@@ -12,9 +12,10 @@ import {
   Modal,
   SafeAreaView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import * as api from '../../../services/api';
+import { formatPrice } from '../../../utils/formatPrice';
 
 const SPECIALTIES = [
   { value: 'GENERAL', label: 'General' },
@@ -30,6 +31,10 @@ const SPECIALTIES = [
 
 export default function VeterinariosScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const normalizedType = typeof params.type === 'string' ? params.type.toUpperCase() : null;
+  const selectedType = ['CHAT', 'VOICE', 'VIDEO'].includes(normalizedType) ? normalizedType : null;
+  const selectedPetId = typeof params.petId === 'string' ? parseInt(params.petId, 10) : undefined;
   const [veterinarians, setVeterinarians] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
@@ -75,18 +80,45 @@ export default function VeterinariosScreen() {
     setShowVetModal(true);
   };
 
-  const handleStartConsultation = async (type) => {
+  const handleStartConsultation = async (type, vetOverride = null) => {
+    const targetVet = vetOverride || selectedVet;
+    if (!targetVet) {
+      Alert.alert('Error', 'No se encontró el veterinario seleccionado');
+      return;
+    }
+
     try {
       setShowVetModal(false);
       const consultation = await api.createConsultation({
         type,
-        veterinarianId: selectedVet.id,
+        veterinarianId: targetVet.id,
+        petId: Number.isNaN(selectedPetId) ? undefined : selectedPetId,
       });
       
       // Redirigir directamente al chat (pago después)
       router.push(`consulta-chat?id=${consultation.id}`);
     } catch (error) {
       Alert.alert('Error', error.message || 'No se pudo crear la consulta');
+    }
+  };
+
+  const handleSelectVeterinarian = (vet) => {
+    if (selectedType) {
+      handleStartConsultation(selectedType, vet);
+      return;
+    }
+
+    handleViewProfile(vet);
+  };
+
+  const getConsultTypeLabel = (type) => {
+    switch (type) {
+      case 'VOICE':
+        return 'Llamada de voz';
+      case 'VIDEO':
+        return 'Videollamada';
+      default:
+        return 'Chat';
     }
   };
 
@@ -113,6 +145,16 @@ export default function VeterinariosScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+      {selectedType && (
+        <View style={styles.selectedTypeBanner}>
+          <Text style={styles.selectedTypeTitle}>
+            Selecciona un veterinario para {getConsultTypeLabel(selectedType).toLowerCase()}
+          </Text>
+          <Text style={styles.selectedTypeSubtitle}>
+            Revisa los disponibles y elige con quién quieres atenderte.
+          </Text>
+        </View>
+      )}
       {/* Barra de búsqueda */}
       <View style={styles.searchContainer}>
         <TextInput
@@ -197,7 +239,7 @@ export default function VeterinariosScreen() {
             <TouchableOpacity
               key={vet.id}
               style={styles.vetCard}
-              onPress={() => handleViewProfile(vet)}
+              onPress={() => handleSelectVeterinarian(vet)}
             >
               {vet.profilePhoto ? (
                 <Image
@@ -226,18 +268,38 @@ export default function VeterinariosScreen() {
                     ({vet.totalConsultations || 0} consultas)
                   </Text>
                 </View>
+                <View style={styles.availabilityContainer}>
+                  <View style={[
+                    styles.availabilityBadge,
+                    vet.availabilityStatus === 'AVAILABLE' && styles.availabilityAvailable,
+                    vet.availabilityStatus === 'IN_CONSULTATION' && styles.availabilityInConsultation,
+                    vet.availabilityStatus === 'UNAVAILABLE' && styles.availabilityUnavailable,
+                  ]}>
+                    <Text style={styles.availabilityText}>
+                      {vet.availabilityStatus === 'AVAILABLE' && '🟢 Disponible'}
+                      {vet.availabilityStatus === 'IN_CONSULTATION' && '🟡 En Consulta'}
+                      {vet.availabilityStatus === 'UNAVAILABLE' && '🔴 No Disponible'}
+                    </Text>
+                  </View>
+                </View>
                 <Text style={styles.vetPrice}>
                   ${((vet.priceChat || 0) + (vet.priceVoice || 0) + (vet.priceVideo || 0)) / 3 > 0 
-                    ? (((vet.priceChat || 0) + (vet.priceVoice || 0) + (vet.priceVideo || 0)) / 3).toFixed(2)
-                    : (vet.pricePerConsultation || 0).toFixed(2)} por consulta
+                    ? formatPrice(((vet.priceChat || 0) + (vet.priceVoice || 0) + (vet.priceVideo || 0)) / 3)
+                    : formatPrice(vet.pricePerConsultation || 0)} por consulta
                 </Text>
               </View>
-              <TouchableOpacity
-                style={styles.consultButton}
-                onPress={() => handleViewProfile(vet)}
-              >
-                <Text style={styles.consultButtonText}>Consultar</Text>
-              </TouchableOpacity>
+              {vet.availabilityStatus !== 'UNAVAILABLE' ? (
+                <TouchableOpacity
+                  style={styles.consultButton}
+                  onPress={() => handleSelectVeterinarian(vet)}
+                >
+                  <Text style={styles.consultButtonText}>Consultar</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.unavailableButton}>
+                  <Text style={styles.unavailableButtonText}>No Disponible</Text>
+                </View>
+              )}
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -295,43 +357,85 @@ export default function VeterinariosScreen() {
                       {selectedVet.totalConsultations || 0} consultas realizadas
                     </Text>
                   </View>
+                  <View style={styles.modalAvailabilityContainer}>
+                    <View style={[
+                      styles.modalAvailabilityBadge,
+                      selectedVet.availabilityStatus === 'AVAILABLE' && styles.modalAvailabilityAvailable,
+                      selectedVet.availabilityStatus === 'IN_CONSULTATION' && styles.modalAvailabilityInConsultation,
+                      selectedVet.availabilityStatus === 'UNAVAILABLE' && styles.modalAvailabilityUnavailable,
+                    ]}>
+                      <Text style={styles.modalAvailabilityText}>
+                        {selectedVet.availabilityStatus === 'AVAILABLE' && '🟢 Disponible'}
+                        {selectedVet.availabilityStatus === 'IN_CONSULTATION' && '🟡 En Consulta'}
+                        {selectedVet.availabilityStatus === 'UNAVAILABLE' && '🔴 No Disponible'}
+                      </Text>
+                    </View>
+                  </View>
                   <View style={styles.modalPricesContainer}>
                     <Text style={styles.modalPriceLabel}>Precios:</Text>
                     <Text style={styles.modalPrice}>
-                      💬 Chat: ${(selectedVet.priceChat || 0).toFixed(2)}
+                      💬 Chat: ${formatPrice(selectedVet.priceChat || 0)}
                     </Text>
                     <Text style={styles.modalPrice}>
-                      📞 Voz: ${(selectedVet.priceVoice || 0).toFixed(2)}
+                      📞 Voz: ${formatPrice(selectedVet.priceVoice || 0)}
                     </Text>
                     <Text style={styles.modalPrice}>
-                      📹 Video: ${(selectedVet.priceVideo || 0).toFixed(2)}
+                      📹 Video: ${formatPrice(selectedVet.priceVideo || 0)}
                     </Text>
                     {!selectedVet.priceChat && !selectedVet.priceVoice && !selectedVet.priceVideo && selectedVet.pricePerConsultation && (
                       <Text style={styles.modalPrice}>
-                        Precio: ${(selectedVet.pricePerConsultation || 0).toFixed(2)}
+                        Precio: ${formatPrice(selectedVet.pricePerConsultation || 0)}
                       </Text>
                     )}
                   </View>
                 </ScrollView>
                 <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={[styles.consultTypeButton, styles.chatButton]}
-                    onPress={() => handleStartConsultation('CHAT')}
-                  >
-                    <Text style={styles.consultTypeButtonText}>💬 Chat</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.consultTypeButton, styles.voiceButton]}
-                    onPress={() => handleStartConsultation('VOICE')}
-                  >
-                    <Text style={styles.consultTypeButtonText}>📞 Voz</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.consultTypeButton, styles.videoButton]}
-                    onPress={() => handleStartConsultation('VIDEO')}
-                  >
-                    <Text style={styles.consultTypeButtonText}>📹 Video</Text>
-                  </TouchableOpacity>
+                  {selectedVet.availabilityStatus !== 'UNAVAILABLE' ? (
+                    selectedType ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.singleConsultTypeButton,
+                          selectedType === 'CHAT' && styles.chatButton,
+                          selectedType === 'VOICE' && styles.voiceButton,
+                          selectedType === 'VIDEO' && styles.videoButton,
+                        ]}
+                        onPress={() => handleStartConsultation(selectedType)}
+                      >
+                        <Text style={styles.consultTypeButtonText}>
+                          {selectedType === 'CHAT' && '💬 Solicitar chat'}
+                          {selectedType === 'VOICE' && '📞 Solicitar llamada de voz'}
+                          {selectedType === 'VIDEO' && '📹 Solicitar videollamada'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.consultTypeButton, styles.chatButton]}
+                          onPress={() => handleStartConsultation('CHAT')}
+                        >
+                          <Text style={styles.consultTypeButtonText}>💬 Chat</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.consultTypeButton, styles.voiceButton]}
+                          onPress={() => handleStartConsultation('VOICE')}
+                        >
+                          <Text style={styles.consultTypeButtonText}>📞 Voz</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.consultTypeButton, styles.videoButton]}
+                          onPress={() => handleStartConsultation('VIDEO')}
+                        >
+                          <Text style={styles.consultTypeButtonText}>📹 Video</Text>
+                        </TouchableOpacity>
+                      </>
+                    )
+                  ) : (
+                    <View style={styles.unavailableMessage}>
+                      <Text style={styles.unavailableText}>
+                        ⚠️ Este veterinario no está disponible en este momento
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 <TouchableOpacity
                   style={styles.closeButton}
@@ -357,6 +461,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  selectedTypeBanner: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EAEAEA',
+  },
+  selectedTypeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+  },
+  selectedTypeSubtitle: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 4,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -498,6 +620,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
   },
+  availabilityContainer: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  availabilityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  availabilityAvailable: {
+    backgroundColor: '#E8F5E9',
+  },
+  availabilityInConsultation: {
+    backgroundColor: '#FFF9E6',
+  },
+  availabilityUnavailable: {
+    backgroundColor: '#FFEBEE',
+  },
+  availabilityText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   vetPrice: {
     fontSize: 14,
     fontWeight: '600',
@@ -515,6 +660,20 @@ const styles = StyleSheet.create({
   },
   consultButtonText: {
     color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  unavailableButton: {
+    backgroundColor: '#E0E0E0',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  unavailableButtonText: {
+    color: '#666',
     fontWeight: '600',
     fontSize: 12,
   },
@@ -630,6 +789,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
+  singleConsultTypeButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
   chatButton: {
     backgroundColor: '#4CAF50',
   },
@@ -652,6 +817,40 @@ const styles = StyleSheet.create({
   },
   closeButtonText: {
     color: '#666',
+    fontWeight: '600',
+  },
+  modalAvailabilityContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalAvailabilityBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  modalAvailabilityAvailable: {
+    backgroundColor: '#E8F5E9',
+  },
+  modalAvailabilityInConsultation: {
+    backgroundColor: '#FFF9E6',
+  },
+  modalAvailabilityUnavailable: {
+    backgroundColor: '#FFEBEE',
+  },
+  modalAvailabilityText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  unavailableMessage: {
+    padding: 16,
+    backgroundColor: '#FFEBEE',
+    borderRadius: 8,
+    width: '100%',
+  },
+  unavailableText: {
+    fontSize: 14,
+    color: '#C62828',
+    textAlign: 'center',
     fontWeight: '600',
   },
 });

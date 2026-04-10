@@ -8,10 +8,13 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import * as api from '../../services/api';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 const SPECIALTIES = [
   { value: 'GENERAL', label: 'General' },
@@ -32,6 +35,7 @@ export default function EditarPerfilVeterinarioScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
     country: '',
@@ -43,6 +47,7 @@ export default function EditarPerfilVeterinarioScreen() {
     priceChat: '',
     priceVoice: '',
     priceVideo: '',
+    profilePhoto: null,
   });
 
   useEffect(() => {
@@ -65,11 +70,19 @@ export default function EditarPerfilVeterinarioScreen() {
         priceChat: profile.priceChat?.toString() || '',
         priceVoice: profile.priceVoice?.toString() || '',
         priceVideo: profile.priceVideo?.toString() || '',
+        profilePhoto: profile.profilePhoto || null,
       });
     } catch (error) {
       console.error('Error cargando perfil:', error);
-      Alert.alert('Error', 'No se pudo cargar el perfil');
-      router.back();
+      // Si no existe perfil, permitir que el usuario lo cree
+      // No hacer router.back(), dejar que el formulario esté vacío para crear
+      if (error.message && error.message.includes('No tienes un perfil')) {
+        // El formulario ya está vacío, solo continuar
+        console.log('No existe perfil, se puede crear uno nuevo');
+      } else {
+        Alert.alert('Error', 'No se pudo cargar el perfil');
+        router.back();
+      }
     } finally {
       setLoading(false);
     }
@@ -82,6 +95,72 @@ export default function EditarPerfilVeterinarioScreen() {
         ? prev.languages.filter((l) => l !== language)
         : [...prev.languages, language],
     }));
+  };
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permisos', 'Se necesitan permisos para acceder a la galería');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setUploadingPhoto(true);
+        try {
+          const formDataUpload = new FormData();
+          formDataUpload.append('photo', {
+            uri: result.assets[0].uri,
+            type: 'image/jpeg',
+            name: `vet_profile_${Date.now()}.jpg`,
+          });
+
+          const uploadResponse = await api.uploadVeterinarianPhoto(formDataUpload);
+          
+          setFormData({
+            ...formData,
+            profilePhoto: uploadResponse.url,
+          });
+
+          Alert.alert('Éxito', 'Foto actualizada correctamente');
+        } catch (error) {
+          console.error('Error subiendo foto:', error);
+          Alert.alert('Error', error.message || 'No se pudo subir la foto');
+        } finally {
+          setUploadingPhoto(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error seleccionando imagen:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  const removePhoto = () => {
+    Alert.alert(
+      'Eliminar foto',
+      '¿Estás seguro de que quieres eliminar tu foto de perfil?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            setFormData({
+              ...formData,
+              profilePhoto: null,
+            });
+          },
+        },
+      ]
+    );
   };
 
   const handleSubmit = async () => {
@@ -121,13 +200,28 @@ export default function EditarPerfilVeterinarioScreen() {
         priceChat: formData.priceChat ? parseFloat(formData.priceChat) : 0,
         priceVoice: formData.priceVoice ? parseFloat(formData.priceVoice) : 0,
         priceVideo: formData.priceVideo ? parseFloat(formData.priceVideo) : 0,
+        profilePhoto: formData.profilePhoto || undefined,
       };
 
-      await api.updateVeterinarianProfile(updateData);
+      const response = await api.updateVeterinarianProfile(updateData);
       
-      Alert.alert('Éxito', 'Perfil actualizado correctamente', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      // Si el perfil tiene status PENDING, es un perfil nuevo que necesita verificación
+      if (response.status === 'PENDING') {
+        Alert.alert(
+          'Éxito',
+          'Perfil de veterinario creado. Está pendiente de verificación.',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.replace('/(tabs)/inicio'),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Éxito', 'Perfil actualizado correctamente', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+      }
     } catch (error) {
       console.error('Error actualizando perfil:', error);
       Alert.alert('Error', error.message || 'No se pudo actualizar el perfil');
@@ -156,6 +250,38 @@ export default function EditarPerfilVeterinarioScreen() {
       </View>
 
       <View style={styles.form}>
+        {/* Foto de Perfil */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Foto de Perfil</Text>
+          <View style={styles.photoSection}>
+            {formData.profilePhoto ? (
+              <View style={styles.photoPreview}>
+                <Image source={{ uri: formData.profilePhoto }} style={styles.photoImage} />
+                <TouchableOpacity style={styles.removePhotoButton} onPress={removePhoto}>
+                  <Text style={styles.removePhotoText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Text style={styles.photoPlaceholderText}>👨‍⚕️</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.photoButton}
+              onPress={pickImage}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator color="#8B7FA8" />
+              ) : (
+                <Text style={styles.photoButtonText}>
+                  {formData.profilePhoto ? 'Cambiar foto' : 'Agregar foto'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Nombre Completo */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Nombre Completo *</Text>
@@ -467,5 +593,66 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
+  },
+  photoSection: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  photoPreview: {
+    position: 'relative',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    overflow: 'hidden',
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#8B7FA8',
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  removePhotoButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removePhotoText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  photoPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#F8F8F8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#E8E8E8',
+  },
+  photoPlaceholderText: {
+    fontSize: 48,
+  },
+  photoButton: {
+    backgroundColor: '#F8F8F8',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  photoButtonText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
   },
 });

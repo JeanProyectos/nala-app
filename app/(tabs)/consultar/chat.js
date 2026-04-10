@@ -34,6 +34,13 @@ const CHAT_OPTIONS = [
     path: 'veterinarios',
   },
   {
+    id: 'my_consultations',
+    label: 'Mis consultas anteriores',
+    icon: '💬',
+    action: 'navigate',
+    path: 'pacientes',
+  },
+  {
     id: 'health_history',
     label: 'Ver historial de salud',
     icon: '💊',
@@ -46,6 +53,20 @@ const CHAT_OPTIONS = [
     icon: '🔔',
     action: 'navigate',
     path: '../salud/recordatorios',
+  },
+  {
+    id: 'community',
+    label: 'Comunidad veterinaria',
+    icon: '👥',
+    action: 'navigate',
+    path: '../community',
+  },
+  {
+    id: 'profile',
+    label: 'Mi perfil',
+    icon: '👤',
+    action: 'navigate',
+    path: '../perfil',
   },
 ];
 

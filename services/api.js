@@ -1,11 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-// ⚠️ IMPORTANTE: Cambia esta IP por la IP de tu computadora
-// En Windows: ipconfig (busca IPv4)
-// Ejemplo: "http://192.168.1.8:3000"
-// Si usas emulador Android en la misma PC, prueba con http://10.0.2.2:3000
+const DEFAULT_API_URL = 'https://nala-api.patasypelos.xyz';
 
-const API_URL = "http://192.168.20.53:3000";
+function resolveApiUrl() {
+  const configuredUrl =
+    Constants.expoConfig?.extra?.apiUrl ||
+    Constants.manifest2?.extra?.apiUrl ||
+    Constants.manifest2?.extra?.expoClient?.extra?.apiUrl ||
+    Constants.manifest?.extra?.apiUrl;
+
+  return (configuredUrl || DEFAULT_API_URL).replace(/\/+$/, '');
+}
+
+const API_URL = resolveApiUrl();
 
 // Función helper para hacer requests con autenticación
 async function apiRequest(endpoint, options = {}) {
@@ -20,11 +28,18 @@ async function apiRequest(endpoint, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  // Agregar timeout de 10 segundos
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
   try {
     const response = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers,
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     // Si la respuesta no es JSON, puede ser un error de conexión
     let data;
@@ -50,6 +65,8 @@ async function apiRequest(endpoint, options = {}) {
 
     return data;
   } catch (error) {
+    clearTimeout(timeoutId);
+    
     console.error('API Error:', {
       endpoint,
       error: error.message,
@@ -57,8 +74,12 @@ async function apiRequest(endpoint, options = {}) {
     });
     
     // Mensajes más amigables para errores comunes
+    if (error.name === 'AbortError' || error.message.includes('aborted')) {
+      throw new Error('La solicitud tardó demasiado. Verifica tu conexión a internet.');
+    }
+    
     if (error.message.includes('Network request failed') || error.message.includes('Failed to fetch')) {
-      throw new Error('No se pudo conectar con el servidor. Verifica que:\n1. El backend esté corriendo\n2. La IP sea correcta\n3. Ambos dispositivos estén en la misma red WiFi');
+      throw new Error('No se pudo conectar con el servidor. Verifica tu conexión y que la API de NALA esté disponible.');
     }
     
     throw error;
@@ -136,6 +157,18 @@ export async function getToken() {
  */
 export async function getProfile() {
   return await apiRequest('/users/me');
+}
+
+/**
+ * Actualiza el perfil del usuario autenticado
+ * @param {object} profileData - { name?, email?, phone? }
+ * @returns {Promise<object>}
+ */
+export async function updateProfile(profileData) {
+  return await apiRequest('/users/me', {
+    method: 'PATCH',
+    body: JSON.stringify(profileData),
+  });
 }
 
 // ============ PETS ============
@@ -418,6 +451,56 @@ export async function uploadPetPhoto(formData) {
   return await response.json();
 }
 
+/**
+ * Sube una foto de perfil de usuario
+ * @param {FormData} formData - FormData con campo 'photo'
+ * @returns {Promise<{url: string, filename: string}>}
+ */
+export async function uploadUserPhoto(formData) {
+  const token = await AsyncStorage.getItem('token');
+  
+  const response = await fetch(`${API_URL}/upload/user-photo`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      // No incluir Content-Type, el navegador lo hará automáticamente con FormData
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Error al subir la imagen' }));
+    throw new Error(error.message || `Error ${response.status}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Sube una foto de perfil de veterinario
+ * @param {FormData} formData - FormData con campo 'photo'
+ * @returns {Promise<{url: string, filename: string}>}
+ */
+export async function uploadVeterinarianPhoto(formData) {
+  const token = await AsyncStorage.getItem('token');
+  
+  const response = await fetch(`${API_URL}/upload/veterinarian-photo`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      // No incluir Content-Type, el navegador lo hará automáticamente con FormData
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Error al subir la imagen' }));
+    throw new Error(error.message || `Error ${response.status}`);
+  }
+
+  return await response.json();
+}
+
 // ============ REMINDERS ============
 
 /**
@@ -543,6 +626,18 @@ export async function updateVeterinarianProfile(updateData) {
   });
 }
 
+/**
+ * Actualiza el estado de disponibilidad del veterinario
+ * @param {string} availabilityStatus - 'AVAILABLE', 'IN_CONSULTATION', 'UNAVAILABLE'
+ * @returns {Promise<object>}
+ */
+export async function updateAvailabilityStatus(availabilityStatus) {
+  return await apiRequest('/veterinarians/me/availability', {
+    method: 'PATCH',
+    body: JSON.stringify({ availabilityStatus }),
+  });
+}
+
 // ============ ADMIN - VETERINARIANS ============
 
 /**
@@ -604,6 +699,28 @@ export async function createConsultation(consultationData) {
 }
 
 /**
+ * Acepta una consulta (solo veterinario)
+ * @param {number} consultationId
+ * @returns {Promise<object>}
+ */
+export async function acceptConsultation(consultationId) {
+  return await apiRequest(`/consultations/${consultationId}/accept`, {
+    method: 'PATCH',
+  });
+}
+
+/**
+ * Rechaza una consulta (solo veterinario)
+ * @param {number} consultationId
+ * @returns {Promise<object>}
+ */
+export async function rejectConsultation(consultationId) {
+  return await apiRequest(`/consultations/${consultationId}/reject`, {
+    method: 'PATCH',
+  });
+}
+
+/**
  * Obtiene las consultas del usuario
  * @returns {Promise<Array>}
  */
@@ -618,17 +735,6 @@ export async function getMyConsultations() {
  */
 export async function getConsultation(id) {
   return await apiRequest(`/consultations/${id}`);
-}
-
-/**
- * Acepta una consulta (solo veterinario)
- * @param {number} id 
- * @returns {Promise<object>}
- */
-export async function acceptConsultation(id) {
-  return await apiRequest(`/consultations/${id}/accept`, {
-    method: 'PATCH',
-  });
 }
 
 /**
@@ -650,10 +756,11 @@ export async function startConsultation(id, isVet = false) {
  * @param {boolean} isVet 
  * @returns {Promise<object>}
  */
-export async function finishConsultation(id, isVet = false) {
+export async function finishConsultation(id, isVet = false, options = {}) {
+  const { reason } = options || {};
   return await apiRequest(`/consultations/${id}/finish`, {
     method: 'PATCH',
-    body: JSON.stringify({ isVet }),
+    body: JSON.stringify({ isVet, reason }),
   });
 }
 
@@ -682,6 +789,19 @@ export async function createPayment(consultationId, redirectUrl) {
   return await apiRequest('/marketplace/payments/create', {
     method: 'POST',
     body: JSON.stringify({ consultationId, redirectUrl }),
+  });
+}
+
+/**
+ * Onboarding de veterinario en Wompi Marketplace
+ * Configura los datos bancarios del veterinario para recibir pagos
+ * @param {object} data - { email, legalName, contactName, phoneNumber, legalId, accountType? }
+ * @returns {Promise<object>}
+ */
+export async function onboardVeterinarian(data) {
+  return await apiRequest('/marketplace/onboard-veterinarian', {
+    method: 'POST',
+    body: JSON.stringify(data),
   });
 }
 
@@ -793,5 +913,17 @@ export async function reportPost(postId, reportData) {
 export async function markCommentAsHelpful(commentId) {
   return await apiRequest(`/community/comments/${commentId}/helpful`, {
     method: 'POST',
+  });
+}
+
+/**
+ * Sube logs de diagnóstico de videollamada al backend.
+ * @param {object} payload
+ * @returns {Promise<object>}
+ */
+export async function uploadVideoCallDiagnostics(payload) {
+  return await apiRequest('/diagnostics/videocall-log', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }

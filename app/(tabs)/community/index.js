@@ -2,12 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
   Alert,
-  Image,
   SafeAreaView,
   RefreshControl,
   TextInput,
@@ -17,6 +15,9 @@ import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../../context/AuthContext';
 import * as api from '../../../services/api';
 import { Ionicons } from '@expo/vector-icons';
+import AnimatedButton from '../../../components/AnimatedButton';
+import AnimatedCard from '../../../components/AnimatedCard';
+import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY } from '../../../styles/theme';
 
 const POST_TYPES = {
   CLINICAL_CASE: 'Caso Clínico',
@@ -149,15 +150,13 @@ export default function CommunityScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Comunidad Veterinaria</Text>
           {user?.role === 'VET' && (
-            <TouchableOpacity
+            <AnimatedButton
               style={styles.createButton}
-              onPress={() => {
-                Alert.alert('Próximamente', 'La funcionalidad de crear posts estará disponible pronto');
-              }}
+              onPress={() => router.push('/community/create-post')}
             >
-              <Ionicons name="add-circle" size={24} color="#FFFFFF" />
+              <Ionicons name="add-circle" size={24} color={COLORS.textWhite} />
               <Text style={styles.createButtonText}>Crear</Text>
-            </TouchableOpacity>
+            </AnimatedButton>
           )}
         </View>
 
@@ -172,46 +171,46 @@ export default function CommunityScreen() {
             onSubmitEditing={() => loadPosts(1)}
           />
           {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => { setSearchText(''); loadPosts(1); }}>
-              <Ionicons name="close-circle" size={20} color="#999" />
-            </TouchableOpacity>
+            <AnimatedButton onPress={() => { setSearchText(''); loadPosts(1); }}>
+              <Ionicons name="close-circle" size={20} color={COLORS.textTertiary} />
+            </AnimatedButton>
           )}
         </View>
 
         {/* Filters */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters}>
-          <TouchableOpacity
+          <AnimatedButton
             style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
             onPress={() => setFilter('all')}
           >
             <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
               Todos
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </AnimatedButton>
+          <AnimatedButton
             style={[styles.filterButton, filter === 'CLINICAL_CASE' && styles.filterButtonActive]}
             onPress={() => setFilter('CLINICAL_CASE')}
           >
             <Text style={[styles.filterText, filter === 'CLINICAL_CASE' && styles.filterTextActive]}>
-              🏥 Casos Clínicos
+              Casos
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </AnimatedButton>
+          <AnimatedButton
             style={[styles.filterButton, filter === 'FORUM_DISCUSSION' && styles.filterButtonActive]}
             onPress={() => setFilter('FORUM_DISCUSSION')}
           >
             <Text style={[styles.filterText, filter === 'FORUM_DISCUSSION' && styles.filterTextActive]}>
-              💬 Discusiones
+              Discusiones
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </AnimatedButton>
+          <AnimatedButton
             style={[styles.filterButton, filter === 'ARTICLE' && styles.filterButtonActive]}
             onPress={() => setFilter('ARTICLE')}
           >
             <Text style={[styles.filterText, filter === 'ARTICLE' && styles.filterTextActive]}>
-              📄 Artículos
+              Artículos
             </Text>
-          </TouchableOpacity>
+          </AnimatedButton>
         </ScrollView>
 
         {/* Posts List */}
@@ -238,12 +237,10 @@ export default function CommunityScreen() {
             }}
           >
             {posts.map((post) => (
-              <TouchableOpacity
+              <AnimatedCard
                 key={post.id}
                 style={styles.postCard}
-                onPress={() => {
-                  Alert.alert('Próximamente', 'La vista detallada de posts estará disponible pronto');
-                }}
+                onPress={() => router.push(`/community/post-detail?id=${post.id}`)}
               >
                 <View style={styles.postHeader}>
                   <View style={styles.postAuthor}>
@@ -313,7 +310,7 @@ export default function CommunityScreen() {
                 )}
 
                 <View style={styles.postFooter}>
-                  <TouchableOpacity
+                  <AnimatedButton
                     style={styles.actionButton}
                     onPress={(e) => {
                       e.stopPropagation();
@@ -323,27 +320,27 @@ export default function CommunityScreen() {
                     <Ionicons
                       name={post.liked ? 'heart' : 'heart-outline'}
                       size={20}
-                      color={post.liked ? '#E91E63' : '#666'}
+                      color={post.liked ? '#E91E63' : COLORS.textSecondary}
                     />
                     <Text style={styles.actionCount}>
                       {post._count?.likes || 0}
                     </Text>
-                  </TouchableOpacity>
+                  </AnimatedButton>
 
-                  <TouchableOpacity
+                  <AnimatedButton
                     style={styles.actionButton}
                     onPress={(e) => {
                       e.stopPropagation();
-                      router.push(`/community/post?id=${post.id}`);
+                      router.push(`/community/post-detail?id=${post.id}`);
                     }}
                   >
-                    <Ionicons name="chatbubble-outline" size={20} color="#666" />
+                    <Ionicons name="chatbubble-outline" size={20} color={COLORS.textSecondary} />
                     <Text style={styles.actionCount}>
                       {post._count?.comments || 0}
                     </Text>
-                  </TouchableOpacity>
+                  </AnimatedButton>
 
-                  <TouchableOpacity
+                  <AnimatedButton
                     style={styles.actionButton}
                     onPress={(e) => {
                       e.stopPropagation();
@@ -353,11 +350,11 @@ export default function CommunityScreen() {
                     <Ionicons
                       name={post.favorited ? 'bookmark' : 'bookmark-outline'}
                       size={20}
-                      color={post.favorited ? '#FF9800' : '#666'}
+                      color={post.favorited ? COLORS.accentOrange : COLORS.textSecondary}
                     />
-                  </TouchableOpacity>
+                  </AnimatedButton>
                 </View>
-              </TouchableOpacity>
+              </AnimatedCard>
             ))}
 
             {hasMore && (
@@ -375,11 +372,11 @@ export default function CommunityScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   loadingContainer: {
     flex: 1,
@@ -390,95 +387,96 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+    padding: SPACING.lg,
+    backgroundColor: COLORS.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: COLORS.border,
+    ...SHADOWS.sm,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#333',
+    ...TYPOGRAPHY.h2,
   },
   createButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#8B7FA8',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    gap: SPACING.xs,
+    ...SHADOWS.sm,
   },
   createButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
+    ...TYPOGRAPHY.captionBold,
+    color: COLORS.textWhite,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    margin: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+    backgroundColor: COLORS.background,
+    margin: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: COLORS.border,
+    ...SHADOWS.sm,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: SPACING.sm,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#333',
+    ...TYPOGRAPHY.body,
   },
   filters: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.xs,
+    paddingVertical: SPACING.xs,
   },
   filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F5',
-    marginRight: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.backgroundTertiary,
+    marginRight: 6,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: COLORS.border,
+    minHeight: 28,
+    maxHeight: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterButtonActive: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#8B7FA8',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 11,
     fontWeight: '500',
+    color: COLORS.textSecondary,
   },
   filterTextActive: {
-    color: '#8B7FA8',
+    color: COLORS.textWhite,
     fontWeight: '600',
   },
   postsList: {
     flex: 1,
-    padding: 16,
+    padding: SPACING.lg,
+    paddingBottom: 100, // Espacio para el tabBar
   },
   postCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.xl,
+    marginBottom: SPACING.md,
+    ...SHADOWS.md,
   },
   postHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   postAuthor: {
     flexDirection: 'row',
@@ -486,124 +484,111 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   authorAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#8B7FA8',
+    width: 48,
+    height: 48,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: SPACING.sm,
+    ...SHADOWS.sm,
   },
   authorAvatarText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.textWhite,
   },
   authorName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    ...TYPOGRAPHY.bodyBold,
   },
   postDate: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
+    ...TYPOGRAPHY.small,
+    marginTop: SPACING.xs / 2,
   },
   postTypeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.md,
   },
   postTypeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
+    ...TYPOGRAPHY.small,
+    color: COLORS.textWhite,
     fontWeight: '600',
   },
   postTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    ...TYPOGRAPHY.h4,
+    marginBottom: SPACING.sm,
   },
   postPreview: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+    ...TYPOGRAPHY.caption,
+    marginBottom: SPACING.sm,
     lineHeight: 20,
   },
   clinicalCasePreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   clinicalCaseLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginRight: 6,
+    ...TYPOGRAPHY.captionBold,
+    marginRight: SPACING.xs,
   },
   clinicalCaseValue: {
-    fontSize: 14,
-    color: '#333',
+    ...TYPOGRAPHY.caption,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 12,
-    gap: 6,
+    marginBottom: SPACING.md,
+    gap: SPACING.xs,
   },
   tag: {
-    backgroundColor: '#F0E6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.md,
   },
   tagText: {
-    fontSize: 12,
-    color: '#8B7FA8',
+    ...TYPOGRAPHY.small,
+    color: COLORS.primary,
     fontWeight: '500',
   },
   postFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: SPACING.md,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    gap: 20,
+    borderTopColor: COLORS.border,
+    gap: SPACING.xl,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: SPACING.xs,
   },
   actionCount: {
-    fontSize: 14,
-    color: '#666',
+    ...TYPOGRAPHY.caption,
     fontWeight: '500',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    padding: SPACING.huge,
   },
   emptyIcon: {
     fontSize: 64,
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    ...TYPOGRAPHY.h4,
+    marginBottom: SPACING.sm,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#666',
+    ...TYPOGRAPHY.caption,
     textAlign: 'center',
   },
   loadMoreContainer: {
-    padding: 20,
+    padding: SPACING.xl,
     alignItems: 'center',
   },
 });

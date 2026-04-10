@@ -50,6 +50,14 @@ export default function ConsultarLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="video-call"
+        options={{
+          title: 'Llamada',
+          headerShown: false,
+          presentation: 'fullScreenModal',
+        }}
+      />
     </Stack>
   );
 }
