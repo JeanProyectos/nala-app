@@ -1,8 +1,24 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import * as api from '../services/api';
 import { useAuth } from './AuthContext';
+
+const ANDROID_CHANNEL_ID = 'nala-alerts';
+
+async function ensureAndroidNotificationChannel() {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+    name: 'NALA',
+    description: 'Consultas, pagos y recordatorios',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#8B7FA8',
+    sound: 'default',
+    showBadge: true,
+  });
+}
 
 // Configurar cómo se manejan las notificaciones cuando la app está en primer plano
 Notifications.setNotificationHandler({
@@ -19,6 +35,10 @@ export function NotificationsProvider({ children }) {
   const { isAuthenticated, user } = useAuth();
   const [expoPushToken, setExpoPushToken] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    ensureAndroidNotificationChannel().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -54,6 +74,7 @@ export function NotificationsProvider({ children }) {
   const registerForPushNotifications = async () => {
     try {
       setLoading(true);
+      await ensureAndroidNotificationChannel();
 
       // Solicitar permisos
       const { status: existingStatus } = await Notifications.getPermissionsAsync();

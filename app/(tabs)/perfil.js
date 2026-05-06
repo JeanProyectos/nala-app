@@ -40,6 +40,7 @@ export default function PerfilScreen() {
   const [notificaciones, setNotificaciones] = useState(false);
   const [loading, setLoading] = useState(true);
   const [veterinarianProfile, setVeterinarianProfile] = useState(null);
+  const [settlementDashboard, setSettlementDashboard] = useState(null);
   const [userPets, setUserPets] = useState([]);
 
   useFocusEffect(
@@ -59,11 +60,16 @@ export default function PerfilScreen() {
       // Si el usuario es VET, cargar perfil de veterinario
       if (user?.role === 'VET') {
         try {
-          const vetProfile = await api.getMyVeterinarianProfile();
+          const [vetProfile, financialDashboard] = await Promise.all([
+            api.getMyVeterinarianProfile(),
+            api.getVeterinarianSettlementDashboard(),
+          ]);
           setVeterinarianProfile(vetProfile);
+          setSettlementDashboard(financialDashboard);
         } catch (error) {
           // Si no tiene perfil de veterinario, no es error
           setVeterinarianProfile(null);
+          setSettlementDashboard(null);
         }
       }
     } catch (error) {
@@ -292,19 +298,31 @@ export default function PerfilScreen() {
             <AnimatedCard style={styles.infoCard}>
               <Text style={styles.infoLabel}>Configuración de Pagos</Text>
               <Text style={styles.infoValue}>
-                {veterinarianProfile.wompiSubaccountId 
-                  ? `✅ Cuenta configurada: ${veterinarianProfile.wompiAccountStatus || 'PENDING'}`
-                  : '⚠️ No has configurado tu cuenta bancaria'}
+                {settlementDashboard?.activePaymentMethod
+                  ? `✅ Metodo activo: ${settlementDashboard.activePaymentMethod.label}`
+                  : '⚠️ No has configurado un metodo de pago activo'}
+              </Text>
+              <Text style={styles.paymentInfoText}>
+                {settlementDashboard?.summary?.commissionText ||
+                  'La aplicacion cobra una comision por cada consulta realizada.'}
+              </Text>
+              <Text style={styles.paymentInfoText}>
+                Pendiente por pagar: $
+                {formatPrice(settlementDashboard?.summary?.pendingSettlementNet || 0)}
               </Text>
               <AnimatedButton
                 style={styles.paymentButton}
                 onPress={() => router.push('/veterinario/configurar-pagos')}
               >
                 <Text style={styles.paymentButtonText}>
-                  {veterinarianProfile.wompiSubaccountId 
-                    ? '🔧 Ver/Actualizar Datos Bancarios'
-                    : '💳 Configurar Datos Bancarios'}
+                  💳 Configurar metodos de pago
                 </Text>
+              </AnimatedButton>
+              <AnimatedButton
+                style={styles.secondaryPaymentButton}
+                onPress={() => router.push('/(tabs)/consultar/liquidaciones')}
+              >
+                <Text style={styles.secondaryPaymentButtonText}>💰 Ver liquidaciones</Text>
               </AnimatedButton>
             </AnimatedCard>
           </>
@@ -621,6 +639,23 @@ const styles = StyleSheet.create({
   paymentButtonText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.textWhite,
+  },
+  paymentInfoText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+    lineHeight: 18,
+  },
+  secondaryPaymentButton: {
+    backgroundColor: COLORS.backgroundTertiary,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+  },
+  secondaryPaymentButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.textSecondary,
   },
   availabilitySection: {
     marginTop: SPACING.sm,

@@ -30,3 +30,6 @@ eas-*-*.txt
 android/app/debug.keystore
 android/apk_build_now.err
 android/apk_build_now.out
+
+# APK / salidas locales
+dist-apk/

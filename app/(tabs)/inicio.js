@@ -107,6 +107,37 @@ export default function InicioScreen() {
     }
   };
 
+  const petSummaryCard = mainPet ? (
+    <AnimatedCard
+      style={[styles.petCard, styles.heroPetCard]}
+      onPress={() => router.push('/mascotas')}
+    >
+      <View style={styles.petHeader}>
+        {mainPet.photo ? (
+          <Image source={{ uri: mainPet.photo }} style={styles.petPhoto} />
+        ) : (
+          <View style={styles.petPhotoPlaceholder}>
+            <Text style={styles.petPhotoIcon}>🐾</Text>
+          </View>
+        )}
+        <View style={styles.petInfo}>
+          <Text style={styles.petLabel}>Mascota principal</Text>
+          <Text style={styles.petName}>{mainPet.name}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
+      </View>
+    </AnimatedCard>
+  ) : (
+    <AnimatedCard
+      style={[styles.addPetCard, styles.heroPetCard]}
+      onPress={() => router.push('/mascotas')}
+    >
+      <Ionicons name="add-circle-outline" size={32} color={COLORS.primary} />
+      <Text style={styles.addPetText}>Agrega tu primera mascota</Text>
+      <Text style={styles.addPetSubtext}>Opcional, pero te ayudara a consultar mas rapido</Text>
+    </AnimatedCard>
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -149,6 +180,7 @@ export default function InicioScreen() {
           Solicita una consulta cuando necesites orientacion para tu mascota.
           Elige el tipo de ayuda y comienza rapidamente.
         </Text>
+        {petSummaryCard}
         <AnimatedButton
           style={styles.heroPrimaryButton}
           onPress={() => router.push('/consultar')}
@@ -160,7 +192,7 @@ export default function InicioScreen() {
             <View style={styles.heroPrimaryButtonText}>
               <Text style={styles.heroPrimaryButtonTitle}>Solicitar consulta</Text>
               <Text style={styles.heroPrimaryButtonSubtitle}>
-                Chat, voz o video
+                Hablar con un veterinario por chat, voz o video
               </Text>
             </View>
           </View>
@@ -178,37 +210,6 @@ export default function InicioScreen() {
 
       <View style={styles.secondarySection}>
         <Text style={styles.secondarySectionTitle}>Informacion util</Text>
-
-        {mainPet ? (
-          <AnimatedCard
-            style={styles.petCard}
-            onPress={() => router.push('/mascotas')}
-          >
-            <View style={styles.petHeader}>
-              {mainPet.photo ? (
-                <Image source={{ uri: mainPet.photo }} style={styles.petPhoto} />
-              ) : (
-                <View style={styles.petPhotoPlaceholder}>
-                  <Text style={styles.petPhotoIcon}>🐾</Text>
-                </View>
-              )}
-              <View style={styles.petInfo}>
-                <Text style={styles.petLabel}>Mascota principal</Text>
-                <Text style={styles.petName}>{mainPet.name}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
-            </View>
-          </AnimatedCard>
-        ) : (
-          <AnimatedCard
-            style={styles.addPetCard}
-            onPress={() => router.push('/mascotas')}
-          >
-            <Ionicons name="add-circle-outline" size={32} color={COLORS.primary} />
-            <Text style={styles.addPetText}>Agrega tu primera mascota</Text>
-            <Text style={styles.addPetSubtext}>Opcional, pero te ayudara a consultar mas rapido</Text>
-          </AnimatedCard>
-        )}
 
         {(nextReminder || nextVaccine) && (
           <View style={styles.supportCards}>
@@ -422,6 +423,9 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.small,
     color: COLORS.textSecondary,
     fontWeight: '500',
+  },
+  heroPetCard: {
+    marginBottom: SPACING.lg,
   },
   petCard: {
     backgroundColor: COLORS.background,

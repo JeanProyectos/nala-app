@@ -44,6 +44,12 @@ export default function ConsultarLayout() {
         }}
       />
       <Stack.Screen
+        name="liquidaciones"
+        options={{
+          title: 'Liquidaciones',
+        }}
+      />
+      <Stack.Screen
         name="pago-consulta"
         options={{
           title: 'Pago de Consulta',

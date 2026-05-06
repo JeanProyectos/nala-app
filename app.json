@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "NALA",
+    "name": "Nala",
     "slug": "nala",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -43,8 +43,23 @@
       "favicon": "./assets/favicon.png"
     },
     "scheme": "nala",
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#8B7FA8",
+      "androidMode": "default",
+      "androidCollapsedTitle": "Nala"
+    },
     "plugins": [
       "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#8B7FA8",
+          "defaultChannel": "nala-alerts",
+          "sounds": []
+        }
+      ],
       [
         "expo-av",
         {

@@ -19,6 +19,12 @@ import { connectSocket, disconnectSocket, getSocket, reconnectSocket } from '../
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SHADOWS } from '../../../styles/theme';
 import StarRating from '../../../components/StarRating';
+import {
+  abandonVetOwnerRatingModal,
+  canPresentVetOwnerRatingModal,
+  finalizeVetOwnerRatingModal,
+  registerVetOwnerRatingModalOpen,
+} from '../../../utils/vetOwnerRatingPrompt';
 
 export default function ConsultaChatScreen() {
   const router = useRouter();
@@ -39,6 +45,9 @@ export default function ConsultaChatScreen() {
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [rating, setRating] = useState(0);
   const [ratingComment, setRatingComment] = useState('');
+  const [showVetRatingModal, setShowVetRatingModal] = useState(false);
+  const [vetRating, setVetRating] = useState(0);
+  const [vetRatingComment, setVetRatingComment] = useState('');
   const [paymentLocked, setPaymentLocked] = useState(false);
   const [paymentApprovedMessage, setPaymentApprovedMessage] = useState('');
   const [incomingCall, setIncomingCall] = useState(null);
@@ -58,6 +67,7 @@ export default function ConsultaChatScreen() {
   const outgoingCallRef = useRef(null);
   const navigatingToCallRef = useRef(false);
   const callFlowLockedRef = useRef(false);
+  const userCancellationInFlightRef = useRef(false);
 
   const hasApprovedPayment = (data) => data?.payment?.status === 'APPROVED';
 
@@ -128,6 +138,9 @@ export default function ConsultaChatScreen() {
     return consultation?.veterinarian?.fullName || 'el veterinario';
   };
 
+  const canJoinCall =
+    consultation?.status === 'IN_PROGRESS' || consultation?.status === 'PAID';
+
   const openCallScreen = (type, initiator) => {
     if (navigatingToCallRef.current) {
       return;
@@ -149,6 +162,26 @@ export default function ConsultaChatScreen() {
       callFlowLockedRef.current = false;
       return undefined;
     }, [])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!consultation || currentUserRole !== 'VET') {
+        return undefined;
+      }
+      if (consultation.status !== 'FINISHED') {
+        return undefined;
+      }
+      if (consultation.ownerRatingByVet) {
+        return undefined;
+      }
+      if (!canPresentVetOwnerRatingModal(consultationId)) {
+        return undefined;
+      }
+      registerVetOwnerRatingModalOpen(consultationId);
+      setShowVetRatingModal(true);
+      return undefined;
+    }, [consultation, currentUserRole, consultationId])
   );
 
   const activatePaymentLock = () => {
@@ -243,6 +276,7 @@ export default function ConsultaChatScreen() {
     connectToSocket();
 
     return () => {
+      abandonVetOwnerRatingModal(consultationId);
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
@@ -559,6 +593,44 @@ export default function ConsultaChatScreen() {
         }
       });
 
+      newSocket.on('consultation_cancelled', (data) => {
+        if (data?.consultationId !== consultationId) {
+          return;
+        }
+        callFlowLockedRef.current = false;
+        navigatingToCallRef.current = false;
+        setIncomingCall(null);
+        setOutgoingCall(null);
+        loadConsultation(false);
+
+        if (data?.cancelledByUserId === currentUserIdRef.current) {
+          if (userCancellationInFlightRef.current) {
+            return;
+          }
+          showAppAlert({
+            title: 'Consulta cancelada',
+            message: 'Cancelaste la consulta.',
+            variant: 'warning',
+            actions: [
+              {
+                text: 'Ir a mis consultas',
+                onPress: () => router.replace('/(tabs)/consultar/pacientes'),
+              },
+            ],
+          });
+          return;
+        }
+
+        const cancelledByVet = !!data?.cancelledByVetUserId;
+        showAppAlert({
+          title: 'Consulta cancelada',
+          message: cancelledByVet
+            ? 'El veterinario canceló la consulta.'
+            : 'El usuario canceló la consulta.',
+          variant: 'warning',
+        });
+      });
+
       newSocket.on('consultation_ended_no_payment', (data) => {
         if (data?.consultationId !== consultationId) {
           return;
@@ -575,6 +647,21 @@ export default function ConsultaChatScreen() {
             variant: 'warning',
           });
         }
+      });
+
+      newSocket.on('consultation_finished', (data) => {
+        if (data?.consultationId !== consultationId || data?.status !== 'FINISHED') {
+          return;
+        }
+        loadConsultation(false);
+        if (currentUserRoleRef.current !== 'VET') {
+          return;
+        }
+        if (!canPresentVetOwnerRatingModal(consultationId)) {
+          return;
+        }
+        registerVetOwnerRatingModalOpen(consultationId);
+        setShowVetRatingModal(true);
       });
 
       // Escuchar reconexión
@@ -634,6 +721,45 @@ export default function ConsultaChatScreen() {
     activeSocket.emit('call_request', {
       consultationId,
       type: normalizedType,
+    });
+  };
+
+  const handleCancelPendingConsultation = () => {
+    showAppAlert({
+      title: 'Cancelar consulta',
+      message: '¿Seguro que deseas cancelar? El veterinario será notificado.',
+      variant: 'warning',
+      actions: [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Sí, cancelar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              userCancellationInFlightRef.current = true;
+              await api.cancelConsultationByUser(consultationId, 'CANCELLED_BY_USER');
+              showAppAlert({
+                title: 'Consulta cancelada',
+                message: 'La solicitud se canceló correctamente.',
+                variant: 'info',
+                actions: [
+                  {
+                    text: 'Ir a mis consultas',
+                    onPress: () => router.replace('/(tabs)/consultar/pacientes'),
+                  },
+                ],
+              });
+            } catch (error) {
+              userCancellationInFlightRef.current = false;
+              showAppAlert({
+                title: 'Error',
+                message: error.message || 'No se pudo cancelar la consulta',
+                variant: 'error',
+              });
+            }
+          },
+        },
+      ],
     });
   };
 
@@ -826,10 +952,7 @@ export default function ConsultaChatScreen() {
         <View style={styles.statusIndicator}>
           <View style={[styles.statusDot, { backgroundColor: '#4CAF50' }]} />
         </View>
-        {/* Llamadas: coincide con gateway (PENDING_APPROVAL | IN_PROGRESS | PAID). */}
-        {(consultation.status === 'IN_PROGRESS' ||
-          consultation.status === 'PAID' ||
-          consultation.status === 'PENDING_APPROVAL') && (
+        {canJoinCall && (
           <View style={styles.callButtons}>
             {consultation.type === 'VOICE' || consultation.type === 'VIDEO' ? (
               <TouchableOpacity
@@ -855,6 +978,11 @@ export default function ConsultaChatScreen() {
           <Text style={styles.paymentBannerText}>
             Esperando la aprobación del veterinario para iniciar la consulta.
           </Text>
+          {currentUserRole === 'USER' ? (
+            <TouchableOpacity style={styles.pendingCancelButton} onPress={handleCancelPendingConsultation}>
+              <Text style={styles.pendingCancelButtonText}>Cancelar consulta</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       )}
 
@@ -961,31 +1089,78 @@ export default function ConsultaChatScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Botón finalizar consulta */}
+      {/* Veterinario: solo cancelar. Usuario: finalizar (calificación al vet tras API). Calificación vet→usuario solo con consultation_finished / FINISHED. */}
       {(consultation.status === 'PENDING_PAYMENT' || consultation.status === 'IN_PROGRESS' || consultation.status === 'PENDING_APPROVAL') && (
         <View style={styles.finishContainer}>
-          <TouchableOpacity
-            style={[styles.finishButton, paymentLocked && currentUserRole === 'USER' && styles.finishButtonDisabled]}
-            onPress={async () => {
-              try {
-                if (paymentLocked && currentUserRole === 'USER') {
-                  activatePaymentLock();
-                  return;
-                }
-                await api.finishConsultation(consultationId, false);
-                // ✅ Mostrar modal de calificación después de finalizar
-                setShowRatingModal(true);
-              } catch (error) {
+          {currentUserRole === 'VET' && (
+            <TouchableOpacity
+              style={[styles.finishButton, styles.cancelConsultButton]}
+              onPress={() => {
                 showAppAlert({
-                  title: 'Error',
-                  message: error.message || 'No se pudo finalizar la consulta',
-                  variant: 'error',
+                  title: 'Cancelar consulta',
+                  message: '¿Seguro que deseas cancelar? El usuario será notificado.',
+                  variant: 'warning',
+                  actions: [
+                    { text: 'No', style: 'cancel' },
+                    {
+                      text: 'Sí, cancelar',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await api.cancelConsultationByVet(consultationId);
+                          await loadConsultation(false);
+                          showAppAlert({
+                            title: 'Listo',
+                            message: 'La consulta fue cancelada.',
+                            variant: 'info',
+                          });
+                        } catch (error) {
+                          showAppAlert({
+                            title: 'Error',
+                            message: error.message || 'No se pudo cancelar',
+                            variant: 'error',
+                          });
+                        }
+                      },
+                    },
+                  ],
                 });
-              }
-            }}
-          >
-            <Text style={styles.finishButtonText}>✅ Finalizar Consulta</Text>
-          </TouchableOpacity>
+              }}
+            >
+              <Text style={styles.finishButtonText}>Cancelar consulta</Text>
+            </TouchableOpacity>
+          )}
+          {currentUserRole === 'USER' && consultation.status === 'PENDING_APPROVAL' && (
+            <TouchableOpacity
+              style={[styles.finishButton, styles.cancelConsultButton]}
+              onPress={handleCancelPendingConsultation}
+            >
+              <Text style={styles.finishButtonText}>Cancelar consulta</Text>
+            </TouchableOpacity>
+          )}
+          {currentUserRole === 'USER' && consultation.status !== 'PENDING_APPROVAL' && (
+            <TouchableOpacity
+              style={[styles.finishButton, paymentLocked && styles.finishButtonDisabled]}
+              onPress={async () => {
+                try {
+                  if (paymentLocked) {
+                    activatePaymentLock();
+                    return;
+                  }
+                  await api.finishConsultation(consultationId, false);
+                  setShowRatingModal(true);
+                } catch (error) {
+                  showAppAlert({
+                    title: 'Error',
+                    message: error.message || 'No se pudo finalizar la consulta',
+                    variant: 'error',
+                  });
+                }
+              }}
+            >
+              <Text style={styles.finishButtonText}>✅ Finalizar Consulta</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -1200,6 +1375,94 @@ export default function ConsultaChatScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={showVetRatingModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          finalizeVetOwnerRatingModal(consultationId);
+          setShowVetRatingModal(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Califica al usuario</Text>
+            <Text style={styles.modalSubtitle}>
+              ¿Cómo fue la consulta con {consultation?.user?.name || 'el tutor'}?
+            </Text>
+            <View style={styles.ratingContainer}>
+              <StarRating
+                rating={vetRating}
+                onRatingChange={setVetRating}
+                editable
+                size={40}
+              />
+            </View>
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Comentario opcional..."
+              placeholderTextColor={COLORS.textTertiary}
+              value={vetRatingComment}
+              onChangeText={setVetRatingComment}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  finalizeVetOwnerRatingModal(consultationId);
+                  setShowVetRatingModal(false);
+                  setVetRating(0);
+                  setVetRatingComment('');
+                }}
+              >
+                <Text style={styles.modalButtonTextCancel}>Omitir</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSubmit, vetRating === 0 && styles.modalButtonDisabled]}
+                onPress={async () => {
+                  if (vetRating === 0) {
+                    showAppAlert({
+                      title: 'Calificación',
+                      message: 'Selecciona una puntuación o pulsa Omitir',
+                      variant: 'error',
+                    });
+                    return;
+                  }
+                  try {
+                    await api.rateConsultationOwner(consultationId, {
+                      rating: vetRating,
+                      comment: vetRatingComment.trim() || undefined,
+                    });
+                    finalizeVetOwnerRatingModal(consultationId);
+                    setShowVetRatingModal(false);
+                    setVetRating(0);
+                    setVetRatingComment('');
+                    showAppAlert({
+                      title: 'Gracias',
+                      message: 'Tu calificación fue registrada.',
+                      variant: 'success',
+                    });
+                    loadConsultation();
+                  } catch (error) {
+                    showAppAlert({
+                      title: 'Error',
+                      message: error.message || 'No se pudo enviar la calificación',
+                      variant: 'error',
+                    });
+                  }
+                }}
+                disabled={vetRating === 0}
+              >
+                <Text style={styles.modalButtonTextSubmit}>Enviar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1365,6 +1628,21 @@ const styles = StyleSheet.create({
     color: '#856404',
     textAlign: 'center',
   },
+  pendingCancelButton: {
+    marginTop: 10,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E53935',
+  },
+  pendingCancelButtonText: {
+    color: '#E53935',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   successBanner: {
     backgroundColor: '#E8F5E9',
     padding: 12,
@@ -1387,12 +1665,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E8E8E8',
+    gap: 10,
   },
   finishButton: {
     backgroundColor: '#4CAF50',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+  },
+  cancelConsultButton: {
+    backgroundColor: '#c62828',
   },
   finishButtonDisabled: {
     backgroundColor: '#A5D6A7',

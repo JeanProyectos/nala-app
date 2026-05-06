@@ -16,31 +16,27 @@ import AnimatedCard from '../../../components/AnimatedCard';
 import AnimatedButton from '../../../components/AnimatedButton';
 import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY } from '../../../styles/theme';
 
-const CONSULTATION_TYPES = [
+const CONSULTATION_FLOW_STEPS = [
   {
-    id: 'CHAT',
-    title: 'Chat',
-    subtitle: 'Ideal para dudas y orientacion escrita.',
-    helperText: 'Empieza rapido y conversa por mensajes.',
-    icon: 'chatbubbles',
+    id: 'choose-vet',
+    title: '1. Elige veterinario',
+    subtitle: 'Revisa perfiles, experiencia y disponibilidad antes de decidir.',
+    icon: 'medkit-outline',
     color: COLORS.primary,
-    primary: true,
   },
   {
-    id: 'VOICE',
-    title: 'Voz',
-    subtitle: 'Habla por llamada con un veterinario.',
-    helperText: 'Util para explicar sintomas rapidamente.',
-    icon: 'call',
+    id: 'choose-service',
+    title: '2. Elige modalidad',
+    subtitle: 'Dentro del perfil veras chat, voz y video con el precio de ese veterinario.',
+    icon: 'grid-outline',
+    color: COLORS.accentBlue,
+  },
+  {
+    id: 'start-consultation',
+    title: '3. Inicia tu consulta',
+    subtitle: 'Confirma el servicio y entra al chat o llamada correspondiente.',
+    icon: 'arrow-forward-circle-outline',
     color: COLORS.accentGreen,
-  },
-  {
-    id: 'VIDEO',
-    title: 'Video',
-    subtitle: 'Muestra a tu mascota en tiempo real.',
-    helperText: 'Recomendado cuando quieres enseñar algo visual.',
-    icon: 'videocam',
-    color: COLORS.accentOrange,
   },
 ];
 
@@ -49,7 +45,6 @@ export default function ConsultarScreen() {
   const { user } = useAuth();
   const [pets, setPets] = useState([]);
   const [loadingPets, setLoadingPets] = useState(true);
-  const [selectedType, setSelectedType] = useState(null);
   const [selectedPetId, setSelectedPetId] = useState(null);
   const [errorState, setErrorState] = useState(false);
 
@@ -71,17 +66,7 @@ export default function ConsultarScreen() {
     }
   };
 
-  const handleSelectType = (type) => {
-    setSelectedType(type);
-    setErrorState(false);
-  };
-
   const handleRequestConsultation = async () => {
-    if (!selectedType) {
-      Alert.alert('Selecciona un tipo', 'Elige chat, voz o video para continuar.');
-      return;
-    }
-
     try {
       const veterinarians = await api.searchVeterinarians();
       const availableVeterinarians = Array.isArray(veterinarians)
@@ -93,12 +78,11 @@ export default function ConsultarScreen() {
         return;
       }
 
-      const query = new URLSearchParams({
-        type: selectedType,
-        ...(selectedPetId ? { petId: String(selectedPetId) } : {}),
-      }).toString();
+      const query = new URLSearchParams(
+        selectedPetId ? { petId: String(selectedPetId) } : {}
+      ).toString();
 
-      router.push(`veterinarios?${query}`);
+      router.push(query ? `veterinarios?${query}` : 'veterinarios');
     } catch (error) {
       Alert.alert('Error', error.message || 'No se pudieron cargar los veterinarios');
     }
@@ -106,7 +90,6 @@ export default function ConsultarScreen() {
 
   const resetSelection = () => {
     setErrorState(false);
-    setSelectedType(null);
   };
 
   if (errorState) {
@@ -116,13 +99,13 @@ export default function ConsultarScreen() {
           <Ionicons name="alert-circle-outline" size={48} color={COLORS.accentOrange} />
           <Text style={styles.searchingTitle}>No hay veterinarios disponibles ahora</Text>
           <Text style={styles.searchingSubtitle}>
-            Puedes reintentar o cambiar el tipo de consulta.
+            Puedes reintentar en unos minutos o revisar nuevamente la lista disponible.
           </Text>
           <AnimatedButton style={styles.retryButton} onPress={handleRequestConsultation}>
             <Text style={styles.retryButtonText}>Reintentar</Text>
           </AnimatedButton>
           <AnimatedButton style={styles.secondaryButton} onPress={resetSelection}>
-            <Text style={styles.secondaryButtonText}>Elegir otro tipo</Text>
+            <Text style={styles.secondaryButtonText}>Volver al inicio</Text>
           </AnimatedButton>
           <AnimatedButton
             style={styles.linkButton}
@@ -171,6 +154,22 @@ export default function ConsultarScreen() {
           <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
         </AnimatedCard>
 
+        <AnimatedCard
+          style={styles.vetDashboardCard}
+          onPress={() => router.push('/(tabs)/consultar/liquidaciones')}
+        >
+          <View style={styles.vetDashboardIcon}>
+            <Ionicons name="cash-outline" size={30} color={COLORS.accentOrange} />
+          </View>
+          <View style={styles.vetDashboardInfo}>
+            <Text style={styles.vetDashboardTitle}>Liquidaciones y pagos</Text>
+            <Text style={styles.vetDashboardSubtitle}>
+              Consulta tus ingresos, la comision aplicada y los lotes pendientes de pago.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
+        </AnimatedCard>
+
         <AnimatedButton style={styles.ctaButton} onPress={() => router.push('pacientes')}>
           <Text style={styles.ctaButtonText}>Ver todas mis consultas</Text>
         </AnimatedButton>
@@ -183,45 +182,54 @@ export default function ConsultarScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Solicitar consulta</Text>
         <Text style={styles.headerSubtitle}>
-          Elige el tipo de consulta y, si quieres, selecciona una mascota antes de escoger veterinario.
+          Primero elige al veterinario ideal para tu mascota. Dentro de su perfil podras comparar chat,
+          llamada y videollamada con sus precios.
         </Text>
       </View>
 
-      {CONSULTATION_TYPES.map((option) => (
-        <AnimatedCard
-          key={option.id}
-          style={[
-            styles.optionCard,
-            option.primary && styles.primaryCard,
-            selectedType === option.id && styles.optionCardSelected,
-          ]}
-          onPress={() => handleSelectType(option.id)}
-        >
-          <View style={[styles.optionIcon, { backgroundColor: `${option.color}15` }]}>
-            <Ionicons name={option.icon} size={32} color={option.color} />
-          </View>
-          <View style={styles.optionInfo}>
-            <Text style={[styles.optionTitle, option.primary && styles.primaryTitle]}>
-              {option.title}
-            </Text>
-            <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
-            <View style={styles.helperContainer}>
-              <Ionicons name="information-circle-outline" size={14} color={COLORS.textTertiary} />
-              <Text style={styles.helperText}>{option.helperText}</Text>
+      <View style={styles.flowSection}>
+        <Text style={styles.flowSectionTitle}>Como funciona</Text>
+        {CONSULTATION_FLOW_STEPS.map((step) => (
+          <AnimatedCard key={step.id} style={styles.flowCard}>
+            <View style={[styles.flowIcon, { backgroundColor: `${step.color}18` }]}>
+              <Ionicons name={step.icon} size={24} color={step.color} />
             </View>
+            <View style={styles.flowInfo}>
+              <Text style={styles.flowTitle}>{step.title}</Text>
+              <Text style={styles.flowSubtitle}>{step.subtitle}</Text>
+            </View>
+          </AnimatedCard>
+        ))}
+      </View>
+
+      <AnimatedButton style={styles.ctaButton} onPress={handleRequestConsultation}>
+        <View style={styles.ctaButtonContent}>
+          <View style={styles.ctaButtonIcon}>
+            <Ionicons name="medkit" size={24} color={COLORS.textWhite} />
           </View>
-          <Ionicons
-            name={selectedType === option.id ? 'checkmark-circle' : 'chevron-forward'}
-            size={20} 
-            color={selectedType === option.id ? COLORS.accentGreen : option.primary ? COLORS.textWhite : COLORS.textTertiary}
-          />
-        </AnimatedCard>
-      ))}
+          <View style={styles.ctaButtonCopy}>
+            <Text style={styles.ctaButtonText}>Solicitar consulta</Text>
+            <Text style={styles.ctaButtonSubtext}>Consulta por chat, llamada o video</Text>
+          </View>
+          <Ionicons name="arrow-forward" size={22} color={COLORS.textWhite} />
+        </View>
+      </AnimatedButton>
+
+      <AnimatedCard style={styles.tipCard}>
+        <View style={styles.tipHeader}>
+          <Ionicons name="sparkles-outline" size={20} color={COLORS.primary} />
+          <Text style={styles.tipTitle}>Te ayudamos a elegir mejor</Text>
+        </View>
+        <Text style={styles.tipText}>
+          Puedes asociar una mascota ahora para que el veterinario tenga contexto desde el inicio. Si no la
+          eliges, podras continuar igual.
+        </Text>
+      </AnimatedCard>
 
       <View style={styles.petSection}>
-        <Text style={styles.petSectionTitle}>Mascota (opcional)</Text>
+        <Text style={styles.petSectionTitle}>Mascota para esta consulta</Text>
         <Text style={styles.petSectionSubtitle}>
-          Puedes continuar sin seleccionar una mascota.
+          Opcional. Si la seleccionas, la consulta se creara con esa mascota vinculada.
         </Text>
 
         {loadingPets ? (
@@ -278,10 +286,6 @@ export default function ConsultarScreen() {
           </ScrollView>
         )}
       </View>
-
-      <AnimatedButton style={styles.ctaButton} onPress={handleRequestConsultation}>
-        <Text style={styles.ctaButtonText}>Ver veterinarios disponibles</Text>
-      </AnimatedButton>
 
       <AnimatedButton style={styles.historyLink} onPress={() => router.push('pacientes')}>
         <Text style={styles.historyLinkText}>Ver mis consultas</Text>
@@ -342,60 +346,64 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     lineHeight: 22,
   },
-  optionCard: {
+  flowSection: {
+    marginBottom: SPACING.xl,
+  },
+  flowSectionTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    marginBottom: SPACING.md,
+  },
+  flowCard: {
     backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.xl,
-    marginBottom: SPACING.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.sm,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    ...SHADOWS.md,
+    alignItems: 'center',
+    ...SHADOWS.sm,
   },
-  primaryCard: {
-    backgroundColor: COLORS.primary,
-    ...SHADOWS.lg,
-  },
-  optionCardSelected: {
-    borderWidth: 2,
-    borderColor: COLORS.accentGreen,
-  },
-  optionIcon: {
-    width: 56,
-    height: 56,
+  flowIcon: {
+    width: 48,
+    height: 48,
     borderRadius: BORDER_RADIUS.round,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.md,
   },
-  optionInfo: {
+  flowInfo: {
     flex: 1,
   },
-  optionTitle: {
+  flowTitle: {
     ...TYPOGRAPHY.bodyBold,
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
-  primaryTitle: {
-    color: COLORS.textWhite,
-  },
-  optionSubtitle: {
+  flowSubtitle: {
     ...TYPOGRAPHY.caption,
     lineHeight: 18,
-    marginBottom: SPACING.xs,
   },
-  helperContainer: {
+  tipCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.xl,
+    marginBottom: SPACING.xl,
+    ...SHADOWS.sm,
+  },
+  tipHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: SPACING.xs,
-    gap: SPACING.xs / 2,
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
-  helperText: {
-    ...TYPOGRAPHY.small,
-    color: COLORS.textTertiary,
-    flex: 1,
-    lineHeight: 16,
+  tipTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.textPrimary,
+  },
+  tipText: {
+    ...TYPOGRAPHY.caption,
+    lineHeight: 20,
+    color: COLORS.textSecondary,
   },
   petSection: {
-    marginTop: SPACING.md,
     marginBottom: SPACING.xl,
   },
   petSectionTitle: {
@@ -448,14 +456,37 @@ const styles = StyleSheet.create({
   },
   ctaButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: BORDER_RADIUS.lg,
-    paddingVertical: SPACING.lg,
-    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.xl,
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
     justifyContent: 'center',
-    ...SHADOWS.md,
+    marginBottom: SPACING.xl,
+    ...SHADOWS.lg,
+  },
+  ctaButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ctaButtonIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  ctaButtonCopy: {
+    flex: 1,
+    marginRight: SPACING.md,
   },
   ctaButtonText: {
-    ...TYPOGRAPHY.button,
+    ...TYPOGRAPHY.h4,
+    color: COLORS.textWhite,
+  },
+  ctaButtonSubtext: {
+    ...TYPOGRAPHY.small,
+    color: 'rgba(255, 255, 255, 0.92)',
   },
   historyLink: {
     alignItems: 'center',

@@ -51,6 +51,8 @@ function RootLayoutNav() {
     return (
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" />
+        <Stack.Screen name="forgot-password" />
+        <Stack.Screen name="reset-password" />
       </Stack>
     );
   }
@@ -73,6 +75,7 @@ function RootLayoutNav() {
         <Stack.Screen name="onboarding" options={{ href: null }} />
         <Stack.Screen name="veterinario-registro" options={{ presentation: 'modal' }} />
         <Stack.Screen name="veterinario/editar-perfil" options={{ title: 'Editar Perfil' }} />
+        <Stack.Screen name="veterinario/configurar-pagos" options={{ title: 'Configurar Pagos' }} />
         <Stack.Screen name="editar-perfil-usuario" options={{ title: 'Editar Perfil' }} />
         <Stack.Screen name="admin/validar-veterinarios" options={{ title: 'Validar Veterinarios' }} />
         <Stack.Screen name="admin/configurar-comision" options={{ title: 'Configurar Comisión' }} />

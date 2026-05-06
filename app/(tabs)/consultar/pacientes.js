@@ -142,6 +142,29 @@ export default function PacientesScreen() {
     );
   };
 
+  const handleCancelPendingConsultation = (consultationId) => {
+    Alert.alert(
+      'Cancelar consulta',
+      '¿Seguro que deseas cancelar esta solicitud? El veterinario será notificado.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Sí, cancelar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.cancelConsultationByUser(consultationId, 'CANCELLED_BY_USER');
+              Alert.alert('Consulta cancelada', 'La solicitud fue cancelada correctamente.');
+              loadConsultations();
+            } catch (error) {
+              Alert.alert('Error', error.message || 'No se pudo cancelar la consulta');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'PENDING_PAYMENT':
@@ -351,6 +374,16 @@ export default function PacientesScreen() {
                       </AnimatedButton>
                     </View>
                   )}
+                  {user?.role === 'USER' && consultation.status === 'PENDING_APPROVAL' && (
+                    <View style={styles.actionButtons}>
+                      <AnimatedButton
+                        style={[styles.actionButton, styles.cancelButton]}
+                        onPress={() => handleCancelPendingConsultation(consultation.id)}
+                      >
+                        <Text style={styles.cancelButtonText}>Cancelar consulta</Text>
+                      </AnimatedButton>
+                    </View>
+                  )}
                   {/* Botón para aceptar consultas pendientes de pago (compatibilidad) */}
                   {user?.role === 'VET' && consultation.status === 'PENDING_PAYMENT' && (
                     <AnimatedButton
@@ -536,11 +569,18 @@ const styles = StyleSheet.create({
   rejectButton: {
     backgroundColor: '#F44336',
   },
+  cancelButton: {
+    backgroundColor: '#F44336',
+  },
   acceptButtonText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.textWhite,
   },
   rejectButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.textWhite,
+  },
+  cancelButtonText: {
     ...TYPOGRAPHY.bodyBold,
     color: COLORS.textWhite,
   },

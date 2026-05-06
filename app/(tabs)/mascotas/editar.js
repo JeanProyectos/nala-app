@@ -18,24 +18,27 @@ import AnimatedButton from '../../../components/AnimatedButton';
 import AnimatedCard from '../../../components/AnimatedCard';
 import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY, INPUT_STYLES, BUTTON_STYLES } from '../../../styles/theme';
 
+const EMPTY_FORM = {
+  nombre: '',
+  tipo: 'Perro',
+  raza: '',
+  sexo: 'UNKNOWN',
+  fechaNacimiento: '',
+  peso: '',
+  color: '',
+  foto: null,
+};
+
 export default function EditarMascotaScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const [formData, setFormData] = useState({
-    nombre: '',
-    tipo: 'Perro',
-    raza: '',
-    sexo: 'UNKNOWN',
-    fechaNacimiento: '',
-    peso: '',
-    color: '',
-    foto: null,
-  });
+  const [formData, setFormData] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     loadPet();
@@ -76,10 +79,53 @@ export default function EditarMascotaScreen() {
   };
 
   const handleChange = (field, value) => {
+    setErrors((prev) => {
+      if (!prev[field]) {
+        return prev;
+      }
+
+      const nextErrors = { ...prev };
+      delete nextErrors[field];
+      return nextErrors;
+    });
     setFormData({
       ...formData,
       [field]: value,
     });
+  };
+
+  const formatDateToISO = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const validateForm = () => {
+    const nextErrors = {};
+
+    if (!formData.nombre.trim()) {
+      nextErrors.nombre = 'Escribe el nombre de tu mascota para guardar los cambios.';
+    }
+
+    if (formData.peso) {
+      const parsedWeight = Number.parseFloat(formData.peso);
+      if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+        nextErrors.peso = 'Ingresa un peso válido en kilogramos, por ejemplo 4.5.';
+      }
+    }
+
+    if (formData.fechaNacimiento) {
+      const selectedBirthDate = new Date(formData.fechaNacimiento);
+      if (Number.isNaN(selectedBirthDate.getTime())) {
+        nextErrors.fechaNacimiento = 'Selecciona una fecha válida desde el calendario.';
+      } else if (selectedBirthDate > new Date()) {
+        nextErrors.fechaNacimiento = 'La fecha de nacimiento no puede estar en el futuro.';
+      }
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
   const pickImage = async (source) => {
@@ -143,13 +189,7 @@ export default function EditarMascotaScreen() {
   };
 
   const handleSave = async () => {
-    if (!formData.nombre.trim()) {
-      Alert.alert('Error', 'Por favor, ingresa el nombre de tu mascota');
-      return;
-    }
-
-    if (formData.peso && isNaN(parseFloat(formData.peso))) {
-      Alert.alert('Error', 'El peso debe ser un número válido');
+    if (!validateForm()) {
       return;
     }
 
@@ -234,12 +274,14 @@ export default function EditarMascotaScreen() {
         {/* Nombre */}
         <Text style={styles.label}>Nombre de la mascota *</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.nombre && styles.inputError]}
           value={formData.nombre}
           onChangeText={(value) => handleChange('nombre', value)}
-          placeholder="Ej: Max"
+          placeholder="Ej: Max, Luna, Toby"
           placeholderTextColor={COLORS.textTertiary}
         />
+        <Text style={styles.helperText}>Usa el nombre con el que la reconoces habitualmente.</Text>
+        {errors.nombre ? <Text style={styles.errorText}>{errors.nombre}</Text> : null}
 
         {/* Tipo */}
         <Text style={styles.label}>Tipo *</Text>
@@ -271,7 +313,7 @@ export default function EditarMascotaScreen() {
           style={styles.input}
           value={formData.raza}
           onChangeText={(value) => handleChange('raza', value)}
-          placeholder="Ej: Labrador"
+          placeholder="Ej: Labrador, Criollo, Siamés"
           placeholderTextColor={COLORS.textTertiary}
         />
 
@@ -306,7 +348,7 @@ export default function EditarMascotaScreen() {
         {/* Fecha de Nacimiento */}
         <Text style={styles.label}>Fecha de Nacimiento</Text>
         <AnimatedButton
-          style={styles.input}
+          style={[styles.input, errors.fechaNacimiento && styles.inputError]}
           onPress={() => {
             if (formData.fechaNacimiento) {
               setSelectedDate(new Date(formData.fechaNacimiento));
@@ -333,26 +375,29 @@ export default function EditarMascotaScreen() {
               setShowDatePicker(Platform.OS === 'ios');
               if (date) {
                 setSelectedDate(date);
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                handleChange('fechaNacimiento', `${year}-${month}-${day}`);
+                handleChange('fechaNacimiento', formatDateToISO(date));
               }
             }}
             maximumDate={new Date()}
           />
         )}
+        <Text style={styles.helperText}>
+          Opcional. Usa el calendario para elegir una fecha pasada válida.
+        </Text>
+        {errors.fechaNacimiento ? <Text style={styles.errorText}>{errors.fechaNacimiento}</Text> : null}
 
         {/* Peso */}
         <Text style={styles.label}>Peso (kg)</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.peso && styles.inputError]}
           value={formData.peso}
           onChangeText={(value) => handleChange('peso', value)}
           placeholder="Ej: 15.5"
           keyboardType="numeric"
           placeholderTextColor={COLORS.textTertiary}
         />
+        <Text style={styles.helperText}>Opcional. Ingresa solo números, por ejemplo 3 o 12.8.</Text>
+        {errors.peso ? <Text style={styles.errorText}>{errors.peso}</Text> : null}
 
         {/* Color */}
         <Text style={styles.label}>Color</Text>
@@ -465,6 +510,10 @@ const styles = StyleSheet.create({
     ...INPUT_STYLES.default,
     justifyContent: 'center',
   },
+  inputError: {
+    borderColor: COLORS.accentRed,
+    borderWidth: 1.5,
+  },
   pickerContainer: {
     flexDirection: 'row',
     gap: SPACING.md,
@@ -510,5 +559,15 @@ const styles = StyleSheet.create({
   datePlaceholder: {
     ...TYPOGRAPHY.body,
     color: COLORS.textTertiary,
+  },
+  helperText: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+  },
+  errorText: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.accentRed,
+    marginTop: SPACING.xs,
   },
 });

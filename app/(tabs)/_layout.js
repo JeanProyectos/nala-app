@@ -45,8 +45,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="inicio"
         options={{
-          title: 'Inicio',
-          tabBarLabel: 'Inicio',
+          title: 'Home',
+          tabBarLabel: 'Home',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
@@ -67,21 +67,16 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="salud"
         options={{
-          title: 'Salud',
-          tabBarLabel: 'Salud',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="medical" size={size} color={color} />
-          ),
-          headerShown: false,
+          href: null,
         }}
       />
       <Tabs.Screen
         name="consultar"
         options={{
-          title: 'Actividad',
-          tabBarLabel: 'Actividad',
+          title: 'Veterinario',
+          tabBarLabel: 'Veterinario',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time-outline" size={size} color={color} />
+            <Ionicons name="medkit-outline" size={size} color={color} />
           ),
           headerShown: false,
         }}
@@ -89,12 +84,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="community"
         options={{
-          title: 'Comunidad',
-          tabBarLabel: 'Comunidad',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people" size={size} color={color} />
-          ),
-          headerShown: false,
+          href: null,
         }}
       />
       <Tabs.Screen

@@ -9,6 +9,8 @@ import {
   SafeAreaView,
   PermissionsAndroid,
   Platform,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +19,13 @@ import { connectSocket } from '../services/socket';
 import * as api from '../services/api';
 import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY } from '../styles/theme';
 import { appendCallLog, clearCallLog, readCallLog } from '../utils/callDiagnostics';
+import {
+  abandonVetOwnerRatingModal,
+  canPresentVetOwnerRatingModal,
+  finalizeVetOwnerRatingModal,
+  registerVetOwnerRatingModalOpen,
+} from '../utils/vetOwnerRatingPrompt';
+import StarRating from './StarRating';
 
 let RTCView, mediaDevices, RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, MediaStream;
 let InCallManager;
@@ -58,11 +67,16 @@ export default function VideoCallScreen() {
   const [isVideoEnabled, setIsVideoEnabled] = useState(callType === 'VIDEO');
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
+  const [localViewKey, setLocalViewKey] = useState(0);
+  const [remoteViewKey, setRemoteViewKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [paymentLocked, setPaymentLocked] = useState(false);
   const [speakerEnabled, setSpeakerEnabled] = useState(true);
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
+  const [showVetRatingModal, setShowVetRatingModal] = useState(false);
+  const [vetRating, setVetRating] = useState(0);
+  const [vetRatingComment, setVetRatingComment] = useState('');
 
   const socketRef = useRef(null);
   const pcRef = useRef(null);
@@ -94,6 +108,25 @@ export default function VideoCallScreen() {
       .padStart(2, '0');
     const secs = (seconds % 60).toString().padStart(2, '0');
     return `${mins}:${secs}`;
+  };
+
+  const applySpeakerRoute = (enabled) => {
+    if (!InCallManager) {
+      return;
+    }
+
+    try {
+      InCallManager.setSpeakerphoneOn(enabled);
+      InCallManager.setForceSpeakerphoneOn(enabled);
+      if (typeof InCallManager.setMicrophoneMute === 'function') {
+        InCallManager.setMicrophoneMute(false);
+      }
+      if (Platform.OS === 'android' && typeof InCallManager.chooseAudioRoute === 'function') {
+        InCallManager.chooseAudioRoute(enabled ? 'SPEAKER_PHONE' : 'EARPIECE');
+      }
+    } catch (error) {
+      logCall('WARN', 'InCallManager speaker route', error?.message || error);
+    }
   };
 
   useEffect(() => {
@@ -213,6 +246,34 @@ export default function VideoCallScreen() {
     });
   };
 
+  const isSameStreamAsLocal = (stream) => {
+    if (!stream || !localStreamRef.current) {
+      return false;
+    }
+
+    const localId = localStreamRef.current.id || localStreamRef.current.toURL?.();
+    const candidateId = stream.id || stream.toURL?.();
+    return !!localId && localId === candidateId;
+  };
+
+  const bindLocalStream = (stream) => {
+    localStreamRef.current = stream;
+    setLocalStream(stream);
+    setLocalViewKey((prev) => prev + 1);
+  };
+
+  const bindRemoteStream = (stream) => {
+    if (!stream || isSameStreamAsLocal(stream)) {
+      logCall('WARN', 'Ignoring remote stream that matches local stream');
+      return;
+    }
+
+    remoteStreamRef.current = stream;
+    setRemoteStream(stream);
+    setRemoteViewKey((prev) => prev + 1);
+    setCallState('connected');
+  };
+
   const cleanupPeerConnection = () => {
     if (pcRef.current) {
       pcRef.current.ontrack = null;
@@ -227,7 +288,6 @@ export default function VideoCallScreen() {
 
   const cleanupMedia = () => {
     stopStream(localStreamRef.current);
-    stopStream(remoteStreamRef.current);
     localStreamRef.current = null;
     remoteStreamRef.current = null;
     remoteMediaStreamRef.current = null;
@@ -269,14 +329,7 @@ export default function VideoCallScreen() {
     return true;
   };
 
-  const leaveCall = (navigateToPayment = false) => {
-    logCall('INFO', 'leaveCall invoked', { navigateToPayment });
-    flushLogsToApi('leaveCall');
-    const activeSocket = socketRef.current;
-    if (activeSocket) {
-      activeSocket.emit('call_end', { consultationId, type: callType });
-    }
-
+  const performCallTeardown = () => {
     detachCallSocketListeners();
     joinConfirmedRef.current = false;
     if (relayFallbackTimeoutRef.current) {
@@ -294,12 +347,35 @@ export default function VideoCallScreen() {
     cleanupPeerConnection();
     cleanupMedia();
     setCallState('waiting');
+  };
+
+  const leaveCall = (navigateToPayment = false) => {
+    logCall('INFO', 'leaveCall invoked', { navigateToPayment });
+    flushLogsToApi('leaveCall');
+    const activeSocket = socketRef.current;
+    if (activeSocket) {
+      activeSocket.emit('call_end', { consultationId, type: callType });
+    }
+
+    performCallTeardown();
 
     if (navigateToPayment) {
       router.replace(`/(tabs)/consultar/pago-consulta?id=${consultationId}`);
     } else {
       router.back();
     }
+  };
+
+  /** Tras colgar: solo cierre de llamada; la calificación vet→usuario es al FINISHED real (socket consultation_finished). */
+  const endCallAndMaybeRateAsVet = () => {
+    logCall('INFO', 'endCall', {});
+    flushLogsToApi('endCall');
+    const activeSocket = socketRef.current;
+    if (activeSocket) {
+      activeSocket.emit('call_end', { consultationId, type: callType });
+    }
+    performCallTeardown();
+    router.back();
   };
 
   const activatePaymentLock = () => {
@@ -413,8 +489,7 @@ export default function VideoCallScreen() {
       videoTracks[0].enabled = isVideoEnabled;
     }
 
-    localStreamRef.current = stream;
-    setLocalStream(stream);
+    bindLocalStream(stream);
     return stream;
   };
 
@@ -445,8 +520,6 @@ export default function VideoCallScreen() {
 
     if (remoteMediaStream) {
       remoteMediaStreamRef.current = remoteMediaStream;
-      remoteStreamRef.current = remoteMediaStream;
-      setRemoteStream(remoteMediaStream);
     }
 
     if (typeof peerConnection.addStream === 'function') {
@@ -468,26 +541,25 @@ export default function VideoCallScreen() {
     peerConnection.ontrack = (event) => {
       logCall('INFO', 'ontrack received', { streams: event.streams?.length || 0 });
       if (event.streams?.[0]) {
-        remoteStreamRef.current = event.streams[0];
-        setRemoteStream(event.streams[0]);
-        setCallState('connected');
+        bindRemoteStream(event.streams[0]);
         return;
       }
 
       if (event.track && remoteMediaStreamRef.current) {
-        remoteMediaStreamRef.current.addTrack(event.track);
-        remoteStreamRef.current = remoteMediaStreamRef.current;
-        setRemoteStream(remoteMediaStreamRef.current);
-        setCallState('connected');
+        const existingTrackIds = new Set(
+          remoteMediaStreamRef.current.getTracks().map((track) => track.id)
+        );
+        if (!existingTrackIds.has(event.track.id)) {
+          remoteMediaStreamRef.current.addTrack(event.track);
+        }
+        bindRemoteStream(remoteMediaStreamRef.current);
       }
     };
 
     peerConnection.onaddstream = (event) => {
       logCall('INFO', 'onaddstream received');
       if (event.stream) {
-        remoteStreamRef.current = event.stream;
-        setRemoteStream(event.stream);
-        setCallState('connected');
+        bindRemoteStream(event.stream);
       }
     };
 
@@ -727,24 +799,22 @@ export default function VideoCallScreen() {
       }
 
       logCall('INFO', 'call_end received', data);
-      joinConfirmedRef.current = false;
-      if (relayFallbackTimeoutRef.current) {
-        clearTimeout(relayFallbackTimeoutRef.current);
-        relayFallbackTimeoutRef.current = null;
-      }
-      if (joinFallbackTimeoutRef.current) {
-        clearTimeout(joinFallbackTimeoutRef.current);
-        joinFallbackTimeoutRef.current = null;
-      }
-      if (callReadyIntervalRef.current) {
-        clearInterval(callReadyIntervalRef.current);
-        callReadyIntervalRef.current = null;
-      }
-      detachCallSocketListeners();
-      cleanupPeerConnection();
-      cleanupMedia();
-      setCallState('waiting');
+      performCallTeardown();
       router.back();
+    };
+
+    const onConsultationFinished = (data) => {
+      if (data?.consultationId !== consultationId || data?.status !== 'FINISHED') {
+        return;
+      }
+      if (currentUserRoleRef.current !== 'VET') {
+        return;
+      }
+      if (!canPresentVetOwnerRatingModal(consultationId)) {
+        return;
+      }
+      registerVetOwnerRatingModalOpen(consultationId);
+      setShowVetRatingModal(true);
     };
 
     activeSocket.on('call_ready', onCallReady);
@@ -754,6 +824,7 @@ export default function VideoCallScreen() {
     activeSocket.on('request_offer', onRequestOffer);
     activeSocket.on('payment_required', onPaymentRequired);
     activeSocket.on('call_end', onCallEnd);
+    activeSocket.on('consultation_finished', onConsultationFinished);
 
     return () => {
       activeSocket.off('call_ready', onCallReady);
@@ -763,8 +834,15 @@ export default function VideoCallScreen() {
       activeSocket.off('request_offer', onRequestOffer);
       activeSocket.off('payment_required', onPaymentRequired);
       activeSocket.off('call_end', onCallEnd);
+      activeSocket.off('consultation_finished', onConsultationFinished);
     };
   };
+
+  useEffect(() => {
+    return () => {
+      abandonVetOwnerRatingModal(consultationId);
+    };
+  }, [consultationId]);
 
   const scheduleRelayFallback = () => {
     relayFallbackTimeoutRef.current = setTimeout(async () => {
@@ -954,56 +1032,134 @@ export default function VideoCallScreen() {
       return undefined;
     }
 
-    const enableSpeaker = callType === 'VIDEO';
+    const enableSpeaker = true;
+
     try {
-      InCallManager.start({ media: callType === 'VIDEO' ? 'video' : 'audio' });
-      InCallManager.setSpeakerphoneOn(enableSpeaker);
-      InCallManager.setForceSpeakerphoneOn(enableSpeaker);
-      setSpeakerEnabled(enableSpeaker);
+      InCallManager.start({ media: callType === 'VIDEO' ? 'video' : 'audio', auto: true });
+      applySpeakerRoute(enableSpeaker);
+      setSpeakerEnabled(true);
+      const t1 = setTimeout(() => applySpeakerRoute(enableSpeaker), 400);
+      const t2 = setTimeout(() => applySpeakerRoute(enableSpeaker), 1200);
+      const t3 = setTimeout(() => applySpeakerRoute(enableSpeaker), 2500);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+        try {
+          InCallManager.setForceSpeakerphoneOn(null);
+          InCallManager.stop();
+        } catch (error) {
+          // no-op
+        }
+      };
     } catch (error) {
       logCall('WARN', 'InCallManager speaker setup failed', error?.message || error);
+      return undefined;
+    }
+  }, [callType]);
+
+  useEffect(() => {
+    if (!InCallManager || !speakerEnabled || callState !== 'connected') {
+      return undefined;
     }
 
-    return () => {
-      try {
-        InCallManager.setForceSpeakerphoneOn(null);
-        InCallManager.stop();
-      } catch (error) {
-        // no-op
-      }
-    };
-  }, [callType]);
+    applySpeakerRoute(true);
+    const timeoutId = setTimeout(() => applySpeakerRoute(true), 600);
+    return () => clearTimeout(timeoutId);
+  }, [callState, speakerEnabled]);
 
   const toggleSpeaker = () => {
     const next = !speakerEnabled;
     setSpeakerEnabled(next);
-    if (!InCallManager) {
-      return;
-    }
-    try {
-      InCallManager.setSpeakerphoneOn(next);
-      InCallManager.setForceSpeakerphoneOn(next);
-    } catch (error) {
-      logCall('WARN', 'Toggle speaker failed', error?.message || error);
-    }
+    applySpeakerRoute(next);
   };
 
-  const flipCamera = () => {
-    if (callType !== 'VIDEO') {
+  const flipCamera = async () => {
+    if (callType !== 'VIDEO' || !localStreamRef.current) {
       return;
     }
 
-    const videoTrack = localStreamRef.current?.getVideoTracks?.()?.[0];
-    if (!videoTrack || typeof videoTrack._switchCamera !== 'function') {
-      logCall('WARN', 'Camera flip not supported on this device/runtime');
+    const localVideoTrack = localStreamRef.current.getVideoTracks?.()[0];
+    if (!localVideoTrack) {
       return;
     }
+
+    const nextFront = !isFrontCamera;
+    const facing = nextFront ? 'user' : 'environment';
 
     try {
-      videoTrack._switchCamera();
-      setIsFrontCamera((prev) => !prev);
+      if (typeof localVideoTrack._switchCamera === 'function') {
+        localVideoTrack._switchCamera();
+        setIsFrontCamera(nextFront);
+        bindLocalStream(localStreamRef.current);
+        logCall('INFO', 'Camera flipped via _switchCamera', { facing });
+        return;
+      }
+
+      if (!mediaDevices || !pcRef.current) {
+        logCall('WARN', 'Camera flip unavailable without mediaDevices/peerConnection');
+        return;
+      }
+
+      const newStream = await mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: facing,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) {
+        newStream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      const senders = pcRef.current.getSenders?.() || [];
+      const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+      if (videoSender && typeof videoSender.replaceTrack === 'function') {
+        await videoSender.replaceTrack(newVideoTrack);
+      } else {
+        newStream.getTracks().forEach((t) => t.stop());
+        logCall('WARN', 'Camera flip fallback unavailable: missing video sender');
+        return;
+      }
+
+      newVideoTrack.enabled = isVideoEnabled;
+
+      const currentStream = localStreamRef.current;
+      const oldVideoTrack = currentStream.getVideoTracks?.()[0];
+      const audioTracks = currentStream.getAudioTracks?.() || [];
+      const nextLocalStream = MediaStream ? new MediaStream() : currentStream;
+
+      if (MediaStream) {
+        audioTracks.forEach((track) => nextLocalStream.addTrack(track));
+        nextLocalStream.addTrack(newVideoTrack);
+      }
+
+      if (!MediaStream) {
+        if (oldVideoTrack) {
+          currentStream.removeTrack(oldVideoTrack);
+        }
+        currentStream.addTrack(newVideoTrack);
+      }
+
+      if (oldVideoTrack) {
+        try {
+          oldVideoTrack.stop();
+        } catch (e) {
+          /* noop */
+        }
+      }
+      newStream.getTracks().forEach((t) => {
+        if (t !== newVideoTrack) t.stop();
+      });
+
+      bindLocalStream(nextLocalStream);
+      setIsFrontCamera(nextFront);
+      logCall('INFO', 'Camera flipped via local track replacement', { facing });
     } catch (error) {
-      logCall('ERROR', 'Error flipping camera', error?.message || error);
+      logCall('ERROR', 'Error flipping camera (replaceTrack)', error?.message || error);
     }
   };
 
@@ -1032,7 +1188,7 @@ export default function VideoCallScreen() {
   };
 
   const endCall = () => {
-    leaveCall(false);
+    endCallAndMaybeRateAsVet();
   };
 
   return (
@@ -1041,6 +1197,7 @@ export default function VideoCallScreen() {
         <View style={styles.remoteVideoContainer} pointerEvents="none">
           {remoteStream && RTCView ? (
             <RTCView
+              key={`remote-${remoteViewKey}`}
               streamURL={remoteStream.toURL()}
               style={styles.remoteVideo}
               objectFit="cover"
@@ -1063,6 +1220,7 @@ export default function VideoCallScreen() {
         <View style={styles.headerOverlay}>
           <Text style={styles.contactName}>{contactName}</Text>
           <Text style={styles.callDuration}>{formatDuration(callDurationSeconds)}</Text>
+          <Text style={styles.videoRoleHint}>Vista principal: participante remoto</Text>
         </View>
 
         {(isMuted || paymentLocked) && (
@@ -1075,7 +1233,11 @@ export default function VideoCallScreen() {
 
         {callType === 'VIDEO' && localStream && RTCView && (
           <View style={styles.localVideoContainer}>
+            <View style={styles.localVideoBadge}>
+              <Text style={styles.localVideoBadgeText}>{isFrontCamera ? 'Tu camara frontal' : 'Tu camara trasera'}</Text>
+            </View>
             <RTCView
+              key={`local-${localViewKey}`}
               streamURL={localStream.toURL()}
               style={styles.localVideo}
               objectFit="cover"
@@ -1086,10 +1248,6 @@ export default function VideoCallScreen() {
 
         <View style={styles.controlsWrap}>
           <View style={styles.controls}>
-            <TouchableOpacity style={styles.controlButton} disabled={paymentLocked}>
-              <Ionicons name="ellipsis-horizontal" size={24} color="#111" />
-            </TouchableOpacity>
-
             {callType === 'VIDEO' && (
               <TouchableOpacity
                 style={styles.controlButton}
@@ -1097,6 +1255,20 @@ export default function VideoCallScreen() {
                 disabled={paymentLocked}
               >
                 <Ionicons name={isVideoEnabled ? 'videocam' : 'videocam-off'} size={24} color="#111" />
+              </TouchableOpacity>
+            )}
+
+            {callType === 'VIDEO' && (
+              <TouchableOpacity
+                style={styles.controlButton}
+                onPress={flipCamera}
+                disabled={paymentLocked}
+              >
+                <Ionicons
+                  name={isFrontCamera ? 'camera-reverse' : 'camera-reverse-outline'}
+                  size={24}
+                  color="#111"
+                />
               </TouchableOpacity>
             )}
 
@@ -1117,26 +1289,81 @@ export default function VideoCallScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.controlButton, styles.endCallButton]} onPress={endCall}>
-              <Ionicons name="call" size={24} color={COLORS.textWhite} />
+              <Ionicons name="call" size={28} color={COLORS.textWhite} />
             </TouchableOpacity>
           </View>
         </View>
-
-        {callType === 'VIDEO' && (
-          <TouchableOpacity style={styles.flipButton} onPress={flipCamera} disabled={paymentLocked}>
-            <Ionicons
-              name={isFrontCamera ? 'camera-reverse' : 'camera-reverse-outline'}
-              size={22}
-              color={COLORS.textWhite}
-            />
-          </TouchableOpacity>
-        )}
 
         {loading && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color={COLORS.textWhite} />
           </View>
         )}
+
+        <Modal
+          visible={showVetRatingModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => {
+            finalizeVetOwnerRatingModal(consultationId);
+            setShowVetRatingModal(false);
+            router.back();
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.ratingModalCard}>
+              <Text style={styles.ratingModalTitle}>Califica al usuario</Text>
+              <Text style={styles.ratingModalSubtitle}>
+                ¿Cómo fue la consulta con este tutor? (opcional pero nos ayuda a mejorar)
+              </Text>
+              <View style={styles.ratingStarsWrap}>
+                <StarRating rating={vetRating} onRatingChange={setVetRating} editable={true} size={36} />
+              </View>
+              <TextInput
+                style={styles.ratingCommentInput}
+                placeholder="Comentario opcional"
+                placeholderTextColor={COLORS.textTertiary}
+                value={vetRatingComment}
+                onChangeText={setVetRatingComment}
+                multiline
+              />
+              <View style={styles.ratingModalActions}>
+                <TouchableOpacity
+                  style={[styles.controlButton, { flex: 1, backgroundColor: '#e0e0e0' }]}
+                  onPress={() => {
+                    finalizeVetOwnerRatingModal(consultationId);
+                    setShowVetRatingModal(false);
+                    router.back();
+                  }}
+                >
+                  <Text style={{ color: '#111', fontWeight: '600' }}>Omitir</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.controlButton, { flex: 1, backgroundColor: COLORS.primary || '#8B7FA8' }]}
+                  onPress={async () => {
+                    if (vetRating < 1) {
+                      Alert.alert('Calificación', 'Selecciona de 1 a 5 estrellas o pulsa Omitir.');
+                      return;
+                    }
+                    try {
+                      await api.rateConsultationOwner(consultationId, {
+                        rating: vetRating,
+                        comment: vetRatingComment.trim() || undefined,
+                      });
+                      finalizeVetOwnerRatingModal(consultationId);
+                      setShowVetRatingModal(false);
+                      router.back();
+                    } catch (e) {
+                      Alert.alert('Aviso', e?.message || 'No se pudo guardar la calificación');
+                    }
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>Enviar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -1200,6 +1427,22 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 12,
   },
+  localVideoBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    right: 8,
+    zIndex: 2,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  localVideoBadgeText: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.textWhite,
+    textAlign: 'center',
+  },
   headerOverlay: {
     position: 'absolute',
     top: 16,
@@ -1221,6 +1464,11 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     marginTop: 2,
     color: '#EDEDED',
+  },
+  videoRoleHint: {
+    ...TYPOGRAPHY.small,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 2,
   },
   statusBubble: {
     position: 'absolute',
@@ -1248,16 +1496,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 36,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   controlButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1265,17 +1513,47 @@ const styles = StyleSheet.create({
   },
   endCallButton: {
     backgroundColor: COLORS.accentRed,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
-  flipButton: {
-    position: 'absolute',
-    right: 16,
-    bottom: 276,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
+    padding: 24,
+    zIndex: 20,
+  },
+  ratingModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+  },
+  ratingModalTitle: {
+    ...TYPOGRAPHY.h3,
+    color: '#111',
+    marginBottom: 8,
+  },
+  ratingModalSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginBottom: 16,
+  },
+  ratingStarsWrap: {
     alignItems: 'center',
-    zIndex: 7,
+    marginBottom: 12,
+  },
+  ratingCommentInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 80,
+    marginBottom: 16,
+    color: '#111',
+  },
+  ratingModalActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
 });

@@ -136,6 +136,48 @@ export async function login(email, password) {
 }
 
 /**
+ * Recuperación de contraseña (sin token)
+ */
+export async function requestPasswordReset(email) {
+  const response = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'No se pudo enviar el código');
+  }
+  return data;
+}
+
+export async function verifyPasswordResetCode(email, code) {
+  const response = await fetch(`${API_URL}/auth/verify-reset-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'Código no válido');
+  }
+  return data;
+}
+
+export async function resetPasswordWithCode(email, code, newPassword) {
+  const response = await fetch(`${API_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code, newPassword }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'No se pudo actualizar la contraseña');
+  }
+  return data;
+}
+
+/**
  * Cierra sesión
  */
 export async function logout() {
@@ -615,6 +657,66 @@ export async function getMyVeterinarianProfile() {
 }
 
 /**
+ * Obtiene el dashboard de liquidaciones del veterinario autenticado
+ * @returns {Promise<object>}
+ */
+export async function getVeterinarianSettlementDashboard() {
+  return await apiRequest('/veterinarian-settlements/me/dashboard');
+}
+
+/**
+ * Obtiene el historial de liquidaciones del veterinario autenticado
+ * @returns {Promise<Array>}
+ */
+export async function getMyVeterinarianSettlements() {
+  return await apiRequest('/veterinarian-settlements/me');
+}
+
+/**
+ * Obtiene los metodos de pago configurados por el veterinario autenticado
+ * @returns {Promise<Array>}
+ */
+export async function getVeterinarianPaymentMethods() {
+  return await apiRequest('/veterinarian-settlements/me/payment-methods');
+}
+
+/**
+ * Crea un nuevo metodo de pago para el veterinario autenticado
+ * @param {object} paymentMethodData
+ * @returns {Promise<object>}
+ */
+export async function createVeterinarianPaymentMethod(paymentMethodData) {
+  return await apiRequest('/veterinarian-settlements/me/payment-methods', {
+    method: 'POST',
+    body: JSON.stringify(paymentMethodData),
+  });
+}
+
+/**
+ * Actualiza un metodo de pago del veterinario autenticado
+ * @param {number} id
+ * @param {object} paymentMethodData
+ * @returns {Promise<object>}
+ */
+export async function updateVeterinarianPaymentMethod(id, paymentMethodData) {
+  return await apiRequest(`/veterinarian-settlements/me/payment-methods/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(paymentMethodData),
+  });
+}
+
+/**
+ * Activa un metodo de pago del veterinario autenticado
+ * @param {number} id
+ * @returns {Promise<Array>}
+ */
+export async function activateVeterinarianPaymentMethod(id) {
+  return await apiRequest(`/veterinarian-settlements/me/payment-methods/${id}/activate`, {
+    method: 'PATCH',
+  });
+}
+
+/**
  * Actualiza el perfil del veterinario
  * @param {object} updateData 
  * @returns {Promise<object>}
@@ -774,6 +876,36 @@ export async function rateConsultation(id, ratingData) {
   return await apiRequest(`/consultations/${id}/rate`, {
     method: 'POST',
     body: JSON.stringify(ratingData),
+  });
+}
+
+/**
+ * Veterinario califica al usuario/tutor (consulta ya finalizada)
+ */
+export async function rateConsultationOwner(id, ratingData) {
+  return await apiRequest(`/consultations/${id}/rate-owner`, {
+    method: 'POST',
+    body: JSON.stringify(ratingData),
+  });
+}
+
+/**
+ * Veterinario cancela la consulta
+ */
+export async function cancelConsultationByVet(id, reason) {
+  return await apiRequest(`/consultations/${id}/cancel`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason: reason || undefined }),
+  });
+}
+
+/**
+ * Usuario cancela una consulta pendiente de aprobación.
+ */
+export async function cancelConsultationByUser(id, reason) {
+  return await apiRequest(`/consultations/${id}/cancel-by-user`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason: reason || undefined }),
   });
 }
 

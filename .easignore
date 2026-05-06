@@ -1,0 +1,7 @@
+# Reduce EAS upload size (artefactos locales no necesarios en la nube)
+dist-apk/
+*.apk
+android/.gradle/
+android/**/build/
+android/app/build/
+android/.idea/

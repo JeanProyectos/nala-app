@@ -27,6 +27,12 @@ const TABS = {
   HISTORY: 'HISTORY',
 };
 
+const addYears = (baseDate, years) => {
+  const nextDate = new Date(baseDate);
+  nextDate.setFullYear(nextDate.getFullYear() + years);
+  return nextDate;
+};
+
 export default function SaludScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(TABS.VACCINES);
@@ -42,6 +48,7 @@ export default function SaludScreen() {
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState(null);
   const [formData, setFormData] = useState({});
+  const [formErrors, setFormErrors] = useState({});
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerField, setDatePickerField] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -120,10 +127,114 @@ export default function SaludScreen() {
   };
 
   const handleChange = (field, value) => {
+    setFormErrors((prev) => {
+      if (!prev[field]) {
+        return prev;
+      }
+
+      const nextErrors = { ...prev };
+      delete nextErrors[field];
+      return nextErrors;
+    });
     setFormData({
       ...formData,
       [field]: value,
     });
+  };
+
+  const parseDateValue = (value) => {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = new Date(`${value}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const formatDateToISO = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getDatePickerConfig = (field) => {
+    const today = new Date();
+    const appliedDate = parseDateValue(formData.appliedDate);
+    const minSupportedDate = addYears(today, -20);
+    const maxSupportedDate = addYears(today, 20);
+
+    if (field === 'appliedDate' || field === 'date') {
+      return {
+        minimumDate: minSupportedDate,
+        maximumDate: maxSupportedDate,
+      };
+    }
+
+    if (field === 'nextDose' || field === 'nextDate') {
+      return {
+        minimumDate: appliedDate || today,
+        maximumDate: maxSupportedDate,
+      };
+    }
+
+    return {};
+  };
+
+  const validateForm = () => {
+    const nextErrors = {};
+    const appliedDate = parseDateValue(formData.appliedDate);
+    const nextDose = parseDateValue(formData.nextDose);
+    const nextDate = parseDateValue(formData.nextDate);
+    const historyDate = parseDateValue(formData.date);
+
+    if (modalType === 'vaccine') {
+      if (!formData.name?.trim()) {
+        nextErrors.name = 'Escribe el nombre de la vacuna para guardarla.';
+      }
+      if (!appliedDate) {
+        nextErrors.appliedDate = 'Selecciona una fecha de aplicación válida.';
+      }
+      if (formData.nextDose) {
+        if (!nextDose) {
+          nextErrors.nextDose = 'Selecciona una próxima dosis válida desde el calendario.';
+        } else if (appliedDate && nextDose < appliedDate) {
+          nextErrors.nextDose = 'La próxima dosis no puede ser anterior a la aplicación.';
+        }
+      }
+    }
+
+    if (modalType === 'deworming') {
+      if (!formData.product?.trim()) {
+        nextErrors.product = 'Ingresa el nombre del producto utilizado.';
+      }
+      if (!appliedDate) {
+        nextErrors.appliedDate = 'Selecciona una fecha aplicada válida.';
+      }
+      if (formData.nextDate) {
+        if (!nextDate) {
+          nextErrors.nextDate = 'Selecciona una próxima fecha válida desde el calendario.';
+        } else if (appliedDate && nextDate < appliedDate) {
+          nextErrors.nextDate = 'La próxima fecha no puede ser anterior a la aplicación.';
+        }
+      }
+    }
+
+    if (modalType === 'allergy' && !formData.description?.trim()) {
+      nextErrors.description = 'Describe la alergia para poder registrarla.';
+    }
+
+    if (modalType === 'history') {
+      if (!formData.reason?.trim()) {
+        nextErrors.reason = 'Ingresa el motivo principal de la consulta o evento.';
+      }
+      if (!historyDate) {
+        nextErrors.date = 'Selecciona una fecha válida para este registro.';
+      }
+    }
+
+    setFormErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
   const openDatePicker = (field) => {
@@ -131,6 +242,8 @@ export default function SaludScreen() {
     const currentValue = formData[field];
     if (currentValue) {
       setSelectedDate(new Date(currentValue));
+    } else if ((field === 'nextDose' || field === 'nextDate') && formData.appliedDate) {
+      setSelectedDate(new Date(formData.appliedDate));
     } else {
       setSelectedDate(new Date());
     }
@@ -142,12 +255,7 @@ export default function SaludScreen() {
     setShowDatePicker(Platform.OS === 'ios');
     if (date) {
       setSelectedDate(date);
-      // Formatear como YYYY-MM-DD
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const formattedDate = `${year}-${month}-${day}`;
-      handleChange(datePickerField, formattedDate);
+      handleChange(datePickerField, formatDateToISO(date));
     }
   };
 
@@ -167,6 +275,8 @@ export default function SaludScreen() {
 
   const openModal = (type, item = null) => {
     setModalType(type);
+    setFormErrors({});
+    setShowDatePicker(false);
     // Si hay un item, es edición; si no, es creación
     if (item) {
       // Cargar datos del item para edición
@@ -247,6 +357,10 @@ export default function SaludScreen() {
   const handleSave = async () => {
     if (!selectedPet) {
       Alert.alert('Error', 'Por favor, selecciona una mascota');
+      return;
+    }
+
+    if (!validateForm()) {
       return;
     }
 
@@ -610,44 +724,61 @@ export default function SaludScreen() {
                 <>
                   <Text style={styles.label}>Nombre de la Vacuna *</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, formErrors.name && styles.inputError]}
                     value={formData.name}
                     onChangeText={(value) => handleChange('name', value)}
-                    placeholder="Ej: Rabia, Triple, etc."
+                    placeholder="Ej: Rabia, Triple felina, Séxtuple"
+                    placeholderTextColor={COLORS.textTertiary}
                   />
+                  <Text style={styles.helperText}>
+                    Usa el nombre con el que aparece en el carnet o certificado.
+                  </Text>
+                  {formErrors.name ? <Text style={styles.errorText}>{formErrors.name}</Text> : null}
                   <Text style={styles.label}>Fecha de Aplicación *</Text>
                   <TouchableOpacity
-                    style={styles.input}
+                    style={[styles.input, formErrors.appliedDate && styles.inputError]}
                     onPress={() => openDatePicker('appliedDate')}
                   >
                     <Text style={formData.appliedDate ? styles.dateText : styles.datePlaceholder}>
                       {formatDateDisplay(formData.appliedDate)}
                     </Text>
                   </TouchableOpacity>
+                  <Text style={styles.helperText}>
+                    Puedes registrar una aplicación pasada o programarla con una fecha futura.
+                  </Text>
+                  {formErrors.appliedDate ? (
+                    <Text style={styles.errorText}>{formErrors.appliedDate}</Text>
+                  ) : null}
                   <Text style={styles.label}>Próxima Dosis</Text>
                   <TouchableOpacity
-                    style={styles.input}
+                    style={[styles.input, formErrors.nextDose && styles.inputError]}
                     onPress={() => openDatePicker('nextDose')}
                   >
                     <Text style={formData.nextDose ? styles.dateText : styles.datePlaceholder}>
                       {formatDateDisplay(formData.nextDose)}
                     </Text>
                   </TouchableOpacity>
+                  <Text style={styles.helperText}>
+                    Opcional. Si la conoces, puedes programarla en una fecha futura.
+                  </Text>
+                  {formErrors.nextDose ? <Text style={styles.errorText}>{formErrors.nextDose}</Text> : null}
                   <Text style={styles.label}>Veterinaria</Text>
                   <TextInput
                     style={styles.input}
                     value={formData.veterinary}
                     onChangeText={(value) => handleChange('veterinary', value)}
                     placeholder="Nombre de la veterinaria"
+                    placeholderTextColor={COLORS.textTertiary}
                   />
                   <Text style={styles.label}>Observaciones</Text>
                   <TextInput
                     style={[styles.input, styles.textArea]}
                     value={formData.observations}
                     onChangeText={(value) => handleChange('observations', value)}
-                    placeholder="Notas adicionales..."
+                    placeholder="Ej: lote, reacción, recordatorios, observaciones clínicas"
                     multiline
                     numberOfLines={3}
+                    placeholderTextColor={COLORS.textTertiary}
                   />
                 </>
               )}
@@ -678,37 +809,53 @@ export default function SaludScreen() {
                   </View>
                   <Text style={styles.label}>Producto Utilizado *</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, formErrors.product && styles.inputError]}
                     value={formData.product}
                     onChangeText={(value) => handleChange('product', value)}
                     placeholder="Ej: Drontal, Frontline, etc."
+                    placeholderTextColor={COLORS.textTertiary}
                   />
+                  <Text style={styles.helperText}>
+                    Escribe el nombre comercial o el producto que quedó en la receta.
+                  </Text>
+                  {formErrors.product ? <Text style={styles.errorText}>{formErrors.product}</Text> : null}
                   <Text style={styles.label}>Fecha Aplicada *</Text>
                   <TouchableOpacity
-                    style={styles.input}
+                    style={[styles.input, formErrors.appliedDate && styles.inputError]}
                     onPress={() => openDatePicker('appliedDate')}
                   >
                     <Text style={formData.appliedDate ? styles.dateText : styles.datePlaceholder}>
                       {formatDateDisplay(formData.appliedDate)}
                     </Text>
                   </TouchableOpacity>
+                  <Text style={styles.helperText}>
+                    Puedes registrar aplicaciones pasadas o dejar una fecha programada.
+                  </Text>
+                  {formErrors.appliedDate ? (
+                    <Text style={styles.errorText}>{formErrors.appliedDate}</Text>
+                  ) : null}
                   <Text style={styles.label}>Próxima Fecha Recomendada</Text>
                   <TouchableOpacity
-                    style={styles.input}
+                    style={[styles.input, formErrors.nextDate && styles.inputError]}
                     onPress={() => openDatePicker('nextDate')}
                   >
                     <Text style={formData.nextDate ? styles.dateText : styles.datePlaceholder}>
                       {formatDateDisplay(formData.nextDate)}
                     </Text>
                   </TouchableOpacity>
+                  <Text style={styles.helperText}>
+                    Opcional. Puedes dejar programado el siguiente control o recordatorio.
+                  </Text>
+                  {formErrors.nextDate ? <Text style={styles.errorText}>{formErrors.nextDate}</Text> : null}
                   <Text style={styles.label}>Observaciones</Text>
                   <TextInput
                     style={[styles.input, styles.textArea]}
                     value={formData.observations}
                     onChangeText={(value) => handleChange('observations', value)}
-                    placeholder="Notas adicionales..."
+                    placeholder="Ej: dosis, presentación, cómo reaccionó la mascota"
                     multiline
                     numberOfLines={3}
+                    placeholderTextColor={COLORS.textTertiary}
                   />
                 </>
               )}
@@ -743,13 +890,20 @@ export default function SaludScreen() {
                   </View>
                   <Text style={styles.label}>Descripción *</Text>
                   <TextInput
-                    style={[styles.input, styles.textArea]}
+                    style={[styles.input, styles.textArea, formErrors.description && styles.inputError]}
                     value={formData.description}
                     onChangeText={(value) => handleChange('description', value)}
-                    placeholder="Describe la alergia..."
+                    placeholder="Ej: sarpullido con pollo, reacción al polvo, sensibilidad a medicamento"
                     multiline
                     numberOfLines={3}
+                    placeholderTextColor={COLORS.textTertiary}
                   />
+                  <Text style={styles.helperText}>
+                    Cuanta más información des, más útil será para futuras consultas.
+                  </Text>
+                  {formErrors.description ? (
+                    <Text style={styles.errorText}>{formErrors.description}</Text>
+                  ) : null}
                   <Text style={styles.label}>Nivel de Gravedad *</Text>
                   <View style={styles.pickerContainer}>
                     {[
@@ -783,53 +937,64 @@ export default function SaludScreen() {
                 <>
                   <Text style={styles.label}>Motivo *</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, formErrors.reason && styles.inputError]}
                     value={formData.reason}
                     onChangeText={(value) => handleChange('reason', value)}
-                    placeholder="Motivo de la consulta"
+                    placeholder="Ej: control general, vómitos, fiebre, revisión postoperatoria"
+                    placeholderTextColor={COLORS.textTertiary}
                   />
+                  <Text style={styles.helperText}>Resume en una frase por qué fue atendida tu mascota.</Text>
+                  {formErrors.reason ? <Text style={styles.errorText}>{formErrors.reason}</Text> : null}
                   <Text style={styles.label}>Fecha *</Text>
                   <TouchableOpacity
-                    style={styles.input}
+                    style={[styles.input, formErrors.date && styles.inputError]}
                     onPress={() => openDatePicker('date')}
                   >
                     <Text style={formData.date ? styles.dateText : styles.datePlaceholder}>
                       {formatDateDisplay(formData.date)}
                     </Text>
                   </TouchableOpacity>
+                  <Text style={styles.helperText}>
+                    Puedes guardar eventos pasados o próximos controles si aún no ocurrieron.
+                  </Text>
+                  {formErrors.date ? <Text style={styles.errorText}>{formErrors.date}</Text> : null}
                   <Text style={styles.label}>Veterinario</Text>
                   <TextInput
                     style={styles.input}
                     value={formData.veterinarian}
                     onChangeText={(value) => handleChange('veterinarian', value)}
                     placeholder="Nombre del veterinario"
+                    placeholderTextColor={COLORS.textTertiary}
                   />
                   <Text style={styles.label}>Diagnóstico</Text>
                   <TextInput
                     style={[styles.input, styles.textArea]}
                     value={formData.diagnosis}
                     onChangeText={(value) => handleChange('diagnosis', value)}
-                    placeholder="Diagnóstico..."
+                    placeholder="Ej: dermatitis, gastroenteritis, control sin hallazgos"
                     multiline
                     numberOfLines={2}
+                    placeholderTextColor={COLORS.textTertiary}
                   />
                   <Text style={styles.label}>Tratamiento</Text>
                   <TextInput
                     style={[styles.input, styles.textArea]}
                     value={formData.treatment}
                     onChangeText={(value) => handleChange('treatment', value)}
-                    placeholder="Tratamiento aplicado..."
+                    placeholder="Ej: hidratación, dieta blanda, antibiótico"
                     multiline
                     numberOfLines={2}
+                    placeholderTextColor={COLORS.textTertiary}
                   />
                   <Text style={styles.label}>Medicamentos</Text>
                   <TextInput
                     style={[styles.input, styles.textArea]}
                     value={formData.medications}
                     onChangeText={(value) => handleChange('medications', value)}
-                    placeholder="Medicamentos recetados..."
+                    placeholder="Ej: omeprazol, prednisolona, antiparasitario"
                     multiline
                     numberOfLines={2}
+                    placeholderTextColor={COLORS.textTertiary}
                   />
                 </>
               )}
@@ -955,7 +1120,8 @@ export default function SaludScreen() {
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleDateChange}
-          maximumDate={new Date()}
+          maximumDate={getDatePickerConfig(datePickerField).maximumDate}
+          minimumDate={getDatePickerConfig(datePickerField).minimumDate}
         />
       )}
     </View>
@@ -1184,6 +1350,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     minHeight: 52,
   },
+  inputError: {
+    borderColor: COLORS.accentRed,
+    borderWidth: 1.5,
+  },
   textArea: {
     minHeight: 100,
     textAlignVertical: 'top',
@@ -1255,5 +1425,15 @@ const styles = StyleSheet.create({
   datePlaceholder: {
     ...TYPOGRAPHY.body,
     color: COLORS.textTertiary,
+  },
+  helperText: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+  },
+  errorText: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.accentRed,
+    marginTop: SPACING.xs,
   },
 });

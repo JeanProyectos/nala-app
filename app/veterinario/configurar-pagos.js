@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   SafeAreaView,
+  Switch,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as api from '../../services/api';
@@ -16,115 +17,145 @@ import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY } from '../../style
 import AnimatedButton from '../../components/AnimatedButton';
 import AnimatedCard from '../../components/AnimatedCard';
 
+const METHOD_TYPES = {
+  BANK_ACCOUNT: 'Cuenta bancaria',
+  MOBILE_WALLET: 'Billetera movil',
+};
+
+const INITIAL_FORM = {
+  type: 'BANK_ACCOUNT',
+  label: '',
+  bank: '',
+  accountType: '',
+  accountNumber: '',
+  walletProvider: '',
+  walletNumber: '',
+  accountHolderName: '',
+  active: true,
+};
+
 export default function ConfigurarPagosScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingMethodId, setEditingMethodId] = useState(null);
+  const [formData, setFormData] = useState(INITIAL_FORM);
+  const [methods, setMethods] = useState([]);
   const [veterinarianProfile, setVeterinarianProfile] = useState(null);
-  
-  const [formData, setFormData] = useState({
-    email: '',
-    legalName: '',
-    contactName: '',
-    phoneNumber: '',
-    legalId: '',
-    accountType: 'COLLECTION',
-  });
+  const [dashboard, setDashboard] = useState(null);
 
   useEffect(() => {
-    loadProfile();
+    loadData();
   }, []);
 
-  const loadProfile = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const profile = await api.getMyVeterinarianProfile();
+      const [profile, paymentMethods, settlementDashboard] = await Promise.all([
+        api.getMyVeterinarianProfile(),
+        api.getVeterinarianPaymentMethods(),
+        api.getVeterinarianSettlementDashboard(),
+      ]);
+
       setVeterinarianProfile(profile);
-      
-      // Prellenar formulario con datos del usuario
-      const userProfile = await api.getProfile();
-      setFormData({
-        email: userProfile?.email || '',
-        legalName: profile?.fullName || '',
-        contactName: profile?.fullName || '',
-        phoneNumber: userProfile?.phone || '',
-        legalId: '',
-        accountType: 'COLLECTION',
-      });
+      setMethods(Array.isArray(paymentMethods) ? paymentMethods : []);
+      setDashboard(settlementDashboard);
     } catch (error) {
-      console.error('Error cargando perfil:', error);
-      Alert.alert('Error', 'No se pudo cargar el perfil');
+      Alert.alert('Error', error.message || 'No se pudo cargar la configuracion de pagos');
     } finally {
       setLoading(false);
     }
   };
 
+  const resetForm = () => {
+    setEditingMethodId(null);
+    setFormData(INITIAL_FORM);
+  };
+
+  const fillForm = (method) => {
+    const details = method?.details || {};
+    setEditingMethodId(method.id);
+    setFormData({
+      type: method.type,
+      label: method.label || '',
+      bank: details.bank || '',
+      accountType: details.accountType || '',
+      accountNumber: details.accountNumber || '',
+      walletProvider: details.walletProvider || '',
+      walletNumber: details.walletNumber || '',
+      accountHolderName: details.accountHolderName || '',
+      active: !!method.active,
+    });
+  };
+
+  const validateForm = () => {
+    if (!formData.accountHolderName.trim()) {
+      return 'Ingresa el nombre del titular';
+    }
+
+    if (formData.type === 'BANK_ACCOUNT') {
+      if (!formData.bank.trim() || !formData.accountType.trim() || !formData.accountNumber.trim()) {
+        return 'Completa banco, tipo y numero de cuenta';
+      }
+    } else if (!formData.walletProvider.trim() || !formData.walletNumber.trim()) {
+      return 'Completa proveedor y numero de billetera';
+    }
+
+    return null;
+  };
+
   const handleSubmit = async () => {
-    // Validaciones
-    if (!formData.email || !formData.legalName || !formData.contactName || 
-        !formData.phoneNumber || !formData.legalId) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
-      return;
-    }
-
-    // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      Alert.alert('Error', 'Por favor ingresa un email válido');
-      return;
-    }
-
-    // Validar teléfono (debe tener al menos 10 dígitos)
-    const phoneRegex = /^[0-9+\-\s()]{10,}$/;
-    if (!phoneRegex.test(formData.phoneNumber.replace(/\s/g, ''))) {
-      Alert.alert('Error', 'Por favor ingresa un teléfono válido (mínimo 10 dígitos)');
-      return;
-    }
-
-    // Validar documento (debe tener al menos 7 dígitos)
-    if (formData.legalId.length < 7) {
-      Alert.alert('Error', 'Por favor ingresa un documento válido (mínimo 7 dígitos)');
+    const validationError = validateForm();
+    if (validationError) {
+      Alert.alert('Error', validationError);
       return;
     }
 
     try {
       setSaving(true);
-      
+      const payload = {
+        type: formData.type,
+        label: formData.label.trim() || undefined,
+        bank: formData.type === 'BANK_ACCOUNT' ? formData.bank.trim() : undefined,
+        accountType:
+          formData.type === 'BANK_ACCOUNT' ? formData.accountType.trim() : undefined,
+        accountNumber:
+          formData.type === 'BANK_ACCOUNT' ? formData.accountNumber.trim() : undefined,
+        walletProvider:
+          formData.type === 'MOBILE_WALLET' ? formData.walletProvider.trim() : undefined,
+        walletNumber:
+          formData.type === 'MOBILE_WALLET' ? formData.walletNumber.trim() : undefined,
+        accountHolderName: formData.accountHolderName.trim(),
+        active: formData.active,
+      };
+
+      if (editingMethodId) {
+        await api.updateVeterinarianPaymentMethod(editingMethodId, payload);
+      } else {
+        await api.createVeterinarianPaymentMethod(payload);
+      }
+
       Alert.alert(
-        'Confirmar Configuración',
-        'Al configurar tus datos bancarios, aceptas que Wompi procesará tus pagos. ¿Deseas continuar?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Confirmar',
-            onPress: async () => {
-              try {
-                await api.onboardVeterinarian(formData);
-                Alert.alert(
-                  '✅ Configuración Exitosa',
-                  'Tus datos bancarios han sido configurados. Wompi revisará tu información y te notificará cuando esté lista.',
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        router.back();
-                      },
-                    },
-                  ]
-                );
-              } catch (error) {
-                const errorMessage = error.message || 'No se pudo configurar los datos bancarios';
-                Alert.alert('Error', errorMessage);
-              } finally {
-                setSaving(false);
-              }
-            },
-          },
-        ]
+        'Exito',
+        editingMethodId
+          ? 'Metodo de pago actualizado correctamente.'
+          : 'Metodo de pago agregado correctamente.',
       );
+      resetForm();
+      await loadData();
     } catch (error) {
-      Alert.alert('Error', error.message || 'No se pudo guardar la configuración');
+      Alert.alert('Error', error.message || 'No se pudo guardar el metodo de pago');
+    } finally {
       setSaving(false);
+    }
+  };
+
+  const handleActivate = async (methodId) => {
+    try {
+      await api.activateVeterinarianPaymentMethod(methodId);
+      await loadData();
+    } catch (error) {
+      Alert.alert('Error', error.message || 'No se pudo activar el metodo');
     }
   };
 
@@ -132,13 +163,15 @@ export default function ConfigurarPagosScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Cargando...</Text>
+        <Text style={styles.loadingText}>Cargando configuracion...</Text>
       </View>
     );
   }
 
-  const isConfigured = veterinarianProfile?.wompiSubaccountId;
-  const accountStatus = veterinarianProfile?.wompiAccountStatus;
+  const activeMethod = methods.find((method) => method.active);
+  const commissionText =
+    dashboard?.summary?.commissionText ||
+    'La aplicacion cobra una comision por cada consulta realizada.';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -147,171 +180,253 @@ export default function ConfigurarPagosScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backButton}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Configurar Pagos</Text>
+          <Text style={styles.headerTitle}>Configurar pagos</Text>
           <View style={styles.backButton} />
         </View>
 
         <AnimatedCard style={styles.infoCard}>
-          <Text style={styles.infoTitle}>💳 Información de Pago</Text>
-          <Text style={styles.infoText}>
-            Para recibir pagos de las consultas, necesitas configurar una cuenta en Wompi Marketplace.
-            Los pagos se dividirán automáticamente entre tú y la plataforma según la comisión configurada.
-          </Text>
+          <Text style={styles.infoTitle}>Liquidacion al veterinario</Text>
+          <Text style={styles.infoText}>{commissionText}</Text>
         </AnimatedCard>
 
-        {isConfigured && (
-          <AnimatedCard style={styles.statusCard}>
-            <Text style={styles.statusTitle}>Estado de tu Cuenta</Text>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>
-                {accountStatus === 'PENDING' && '⏳ Pendiente de Verificación'}
-                {accountStatus === 'APPROVED' && '✅ Cuenta Aprobada'}
-                {accountStatus === 'REJECTED' && '❌ Cuenta Rechazada'}
-              </Text>
-            </View>
-            <Text style={styles.statusSubtext}>
-              ID de Subcuenta: {veterinarianProfile.wompiSubaccountId}
+        {veterinarianProfile?.wompiSubaccountId && (
+          <AnimatedCard style={styles.marketplaceCard}>
+            <Text style={styles.sectionTitle}>Cuenta marketplace</Text>
+            <Text style={styles.marketplaceText}>
+              ID configurado: {veterinarianProfile.wompiSubaccountId}
             </Text>
-            {accountStatus === 'PENDING' && (
-              <Text style={styles.statusNote}>
-                Wompi está revisando tu información. Te notificaremos cuando tu cuenta esté lista.
-              </Text>
-            )}
-            {accountStatus === 'REJECTED' && (
-              <Text style={styles.statusNote}>
-                Tu cuenta fue rechazada. Por favor verifica tus datos y vuelve a intentar.
-              </Text>
-            )}
+            <Text style={styles.marketplaceText}>
+              Estado: {veterinarianProfile.wompiAccountStatus || 'PENDING'}
+            </Text>
           </AnimatedCard>
         )}
 
-        <AnimatedCard style={styles.formCard}>
-          <Text style={styles.formTitle}>Datos Bancarios</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.email}
-              onChangeText={(text) => setFormData({ ...formData, email: text })}
-              placeholder="tu@email.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={!isConfigured}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nombre Legal / Razón Social *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.legalName}
-              onChangeText={(text) => setFormData({ ...formData, legalName: text })}
-              placeholder="Dr. Juan Pérez o Empresa S.A.S."
-              editable={!isConfigured}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nombre de Contacto *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.contactName}
-              onChangeText={(text) => setFormData({ ...formData, contactName: text })}
-              placeholder="Juan Pérez"
-              editable={!isConfigured}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Teléfono *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.phoneNumber}
-              onChangeText={(text) => setFormData({ ...formData, phoneNumber: text })}
-              placeholder="+57 300 123 4567"
-              keyboardType="phone-pad"
-              editable={!isConfigured}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Cédula o NIT *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.legalId}
-              onChangeText={(text) => setFormData({ ...formData, legalId: text.replace(/\D/g, '') })}
-              placeholder="1234567890"
-              keyboardType="numeric"
-              editable={!isConfigured}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Tipo de Cuenta</Text>
-            <View style={styles.radioGroup}>
-              <TouchableOpacity
-                style={[
-                  styles.radioButton,
-                  formData.accountType === 'COLLECTION' && styles.radioButtonActive,
-                ]}
-                onPress={() => setFormData({ ...formData, accountType: 'COLLECTION' })}
-                disabled={isConfigured}
-              >
-                <Text
-                  style={[
-                    styles.radioText,
-                    formData.accountType === 'COLLECTION' && styles.radioTextActive,
-                  ]}
-                >
-                  Recaudo (COLLECTION)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.radioButton,
-                  formData.accountType === 'DISPERSION' && styles.radioButtonActive,
-                ]}
-                onPress={() => setFormData({ ...formData, accountType: 'DISPERSION' })}
-                disabled={isConfigured}
-              >
-                <Text
-                  style={[
-                    styles.radioText,
-                    formData.accountType === 'DISPERSION' && styles.radioTextActive,
-                  ]}
-                >
-                  Dispersión (DISPERSION)
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {!isConfigured && (
-            <AnimatedButton
-              style={styles.submitButton}
-              onPress={handleSubmit}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color={COLORS.textWhite} />
-              ) : (
-                <Text style={styles.submitButtonText}>Configurar Cuenta</Text>
-              )}
-            </AnimatedButton>
+        <AnimatedCard style={styles.activeCard}>
+          <Text style={styles.sectionTitle}>Metodo activo</Text>
+          {activeMethod ? (
+            <>
+              <Text style={styles.methodTitle}>{activeMethod.label}</Text>
+              <Text style={styles.methodSubtitle}>
+                {METHOD_TYPES[activeMethod.type] || activeMethod.type}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.infoText}>Todavia no tienes un metodo activo.</Text>
           )}
         </AnimatedCard>
 
-        <AnimatedCard style={styles.helpCard}>
-          <Text style={styles.helpTitle}>ℹ️ Información Importante</Text>
-          <Text style={styles.helpText}>
-            • Los pagos se procesan automáticamente a través de Wompi{'\n'}
-            • La comisión de la plataforma se calcula según la configuración del administrador{'\n'}
-            • Recibirás el dinero directamente en tu cuenta bancaria configurada en Wompi{'\n'}
-            • Los pagos pueden tardar 1-3 días hábiles en reflejarse{'\n'}
-            • Si tienes problemas, contacta al soporte de Wompi
+        <AnimatedCard style={styles.formCard}>
+          <Text style={styles.sectionTitle}>
+            {editingMethodId ? 'Editar metodo de pago' : 'Agregar metodo de pago'}
           </Text>
+
+          <View style={styles.typeRow}>
+            {Object.entries(METHOD_TYPES).map(([value, label]) => (
+              <TouchableOpacity
+                key={value}
+                style={[
+                  styles.typeButton,
+                  formData.type === value && styles.typeButtonActive,
+                ]}
+                onPress={() =>
+                  setFormData((current) => ({
+                    ...current,
+                    type: value,
+                  }))
+                }
+              >
+                <Text
+                  style={[
+                    styles.typeButtonText,
+                    formData.type === value && styles.typeButtonTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Etiqueta (opcional)</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.label}
+              onChangeText={(text) => setFormData((current) => ({ ...current, label: text }))}
+              placeholder="Ej: Cuenta principal"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nombre del titular *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.accountHolderName}
+              onChangeText={(text) =>
+                setFormData((current) => ({ ...current, accountHolderName: text }))
+              }
+              placeholder="Nombre completo"
+            />
+          </View>
+
+          {formData.type === 'BANK_ACCOUNT' ? (
+            <>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Banco *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.bank}
+                  onChangeText={(text) => setFormData((current) => ({ ...current, bank: text }))}
+                  placeholder="Ej: Bancolombia"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Tipo de cuenta *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.accountType}
+                  onChangeText={(text) =>
+                    setFormData((current) => ({ ...current, accountType: text }))
+                  }
+                  placeholder="Ahorros / Corriente"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Numero de cuenta *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.accountNumber}
+                  onChangeText={(text) =>
+                    setFormData((current) => ({ ...current, accountNumber: text }))
+                  }
+                  placeholder="Numero de cuenta"
+                  keyboardType="number-pad"
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Billetera *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.walletProvider}
+                  onChangeText={(text) =>
+                    setFormData((current) => ({ ...current, walletProvider: text }))
+                  }
+                  placeholder="Ej: Nequi o Daviplata"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Numero *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.walletNumber}
+                  onChangeText={(text) =>
+                    setFormData((current) => ({ ...current, walletNumber: text }))
+                  }
+                  placeholder="Numero de la billetera"
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </>
+          )}
+
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Usar como metodo activo</Text>
+            <Switch
+              value={formData.active}
+              onValueChange={(value) =>
+                setFormData((current) => ({
+                  ...current,
+                  active: value,
+                }))
+              }
+              trackColor={{ false: '#E0E0E0', true: COLORS.primary }}
+            />
+          </View>
+
+          <AnimatedButton style={styles.submitButton} onPress={handleSubmit} disabled={saving}>
+            {saving ? (
+              <ActivityIndicator color={COLORS.textWhite} />
+            ) : (
+              <Text style={styles.submitButtonText}>
+                {editingMethodId ? 'Guardar cambios' : 'Agregar metodo'}
+              </Text>
+            )}
+          </AnimatedButton>
+
+          {editingMethodId ? (
+            <AnimatedButton style={styles.secondaryButton} onPress={resetForm}>
+              <Text style={styles.secondaryButtonText}>Cancelar edicion</Text>
+            </AnimatedButton>
+          ) : null}
         </AnimatedCard>
+
+        <View style={styles.listHeader}>
+          <Text style={styles.sectionTitle}>Tus metodos de pago</Text>
+          <Text style={styles.countText}>{methods.length}</Text>
+        </View>
+
+        {methods.length === 0 ? (
+          <AnimatedCard style={styles.emptyCard}>
+            <Text style={styles.infoText}>
+              Agrega una cuenta bancaria o una billetera movil para recibir tus liquidaciones.
+            </Text>
+          </AnimatedCard>
+        ) : (
+          methods.map((method) => (
+            <AnimatedCard key={method.id} style={styles.methodCard}>
+              <View style={styles.methodHeader}>
+                <View style={styles.methodHeaderInfo}>
+                  <Text style={styles.methodTitle}>{method.label}</Text>
+                  <Text style={styles.methodSubtitle}>
+                    {METHOD_TYPES[method.type] || method.type}
+                  </Text>
+                </View>
+                {method.active ? (
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>Activo</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <Text style={styles.methodDetails}>
+                Titular: {method.details?.accountHolderName || 'No definido'}
+              </Text>
+              {method.type === 'BANK_ACCOUNT' ? (
+                <Text style={styles.methodDetails}>
+                  {method.details?.bank || 'Banco'} · {method.details?.accountType || 'Cuenta'} ·{' '}
+                  {method.details?.accountNumber || 'Sin numero'}
+                </Text>
+              ) : (
+                <Text style={styles.methodDetails}>
+                  {method.details?.walletProvider || 'Billetera'} · {method.details?.walletNumber || 'Sin numero'}
+                </Text>
+              )}
+
+              <View style={styles.methodActions}>
+                <AnimatedButton
+                  style={[styles.smallButton, styles.editButton]}
+                  onPress={() => fillForm(method)}
+                >
+                  <Text style={styles.smallButtonText}>Editar</Text>
+                </AnimatedButton>
+                {!method.active ? (
+                  <AnimatedButton
+                    style={[styles.smallButton, styles.activateButton]}
+                    onPress={() => handleActivate(method.id)}
+                  >
+                    <Text style={styles.smallButtonText}>Activar</Text>
+                  </AnimatedButton>
+                ) : null}
+              </View>
+            </AnimatedCard>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -324,6 +439,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    backgroundColor: COLORS.backgroundSecondary,
   },
   content: {
     padding: SPACING.lg,
@@ -363,47 +479,19 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     ...SHADOWS.sm,
   },
-  infoTitle: {
-    ...TYPOGRAPHY.h4,
-    marginBottom: SPACING.sm,
-  },
-  infoText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-  },
-  statusCard: {
+  marketplaceCard: {
     backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
     ...SHADOWS.sm,
   },
-  statusTitle: {
-    ...TYPOGRAPHY.h4,
+  activeCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
     marginBottom: SPACING.md,
-  },
-  statusBadge: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    alignSelf: 'flex-start',
-    marginBottom: SPACING.sm,
-  },
-  statusText: {
-    ...TYPOGRAPHY.bodyBold,
-    color: COLORS.textWhite,
-  },
-  statusSubtext: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
-  },
-  statusNote: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    fontStyle: 'italic',
+    ...SHADOWS.sm,
   },
   formCard: {
     backgroundColor: COLORS.background,
@@ -412,77 +500,172 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     ...SHADOWS.sm,
   },
-  formTitle: {
+  infoTitle: {
     ...TYPOGRAPHY.h4,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
+  },
+  infoText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    lineHeight: 21,
+  },
+  sectionTitle: {
+    ...TYPOGRAPHY.h4,
+    marginBottom: SPACING.md,
+  },
+  marketplaceText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  typeButton: {
+    flex: 1,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.backgroundTertiary,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+  },
+  typeButtonActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
+  },
+  typeButtonText: {
+    ...TYPOGRAPHY.captionBold,
+    color: COLORS.textSecondary,
+  },
+  typeButtonTextActive: {
+    color: COLORS.primary,
   },
   inputGroup: {
     marginBottom: SPACING.md,
   },
   label: {
     ...TYPOGRAPHY.captionBold,
-    marginBottom: SPACING.xs,
     color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
   },
   input: {
     ...TYPOGRAPHY.body,
     backgroundColor: COLORS.backgroundTertiary,
     borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-  },
-  radioGroup: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  radioButton: {
-    flex: 1,
     padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.backgroundTertiary,
+  },
+  switchRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginVertical: SPACING.sm,
   },
-  radioButtonActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryLight,
-  },
-  radioText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-  },
-  radioTextActive: {
+  switchLabel: {
     ...TYPOGRAPHY.bodyBold,
-    color: COLORS.primary,
   },
   submitButton: {
     backgroundColor: COLORS.primary,
-    padding: SPACING.lg,
     borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.md,
     alignItems: 'center',
     marginTop: SPACING.md,
-    ...SHADOWS.md,
   },
   submitButtonText: {
     ...TYPOGRAPHY.button,
   },
-  helpCard: {
-    backgroundColor: '#FFF9E6',
+  secondaryButton: {
+    backgroundColor: COLORS.backgroundTertiary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+  },
+  secondaryButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.textSecondary,
+  },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  countText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.primary,
+  },
+  emptyCard: {
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.lg,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.accentYellow,
     ...SHADOWS.sm,
   },
-  helpTitle: {
-    ...TYPOGRAPHY.h4,
+  methodCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    ...SHADOWS.sm,
+  },
+  methodHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: SPACING.sm,
   },
-  helpText: {
-    ...TYPOGRAPHY.body,
+  methodHeaderInfo: {
+    flex: 1,
+    marginRight: SPACING.md,
+  },
+  methodTitle: {
+    ...TYPOGRAPHY.bodyBold,
+    marginBottom: SPACING.xs,
+  },
+  methodSubtitle: {
+    ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
-    lineHeight: 20,
+  },
+  methodDetails: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  activeBadge: {
+    backgroundColor: COLORS.accentGreen,
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  activeBadgeText: {
+    ...TYPOGRAPHY.small,
+    color: COLORS.textWhite,
+    fontWeight: '600',
+  },
+  methodActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  smallButton: {
+    flex: 1,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.sm,
+    alignItems: 'center',
+  },
+  editButton: {
+    backgroundColor: COLORS.primary,
+  },
+  activateButton: {
+    backgroundColor: COLORS.accentGreen,
+  },
+  smallButtonText: {
+    ...TYPOGRAPHY.bodyBold,
+    color: COLORS.textWhite,
   },
 });

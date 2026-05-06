@@ -149,6 +149,16 @@ export default function LoginScreen() {
                 : '¿Ya tienes cuenta? Inicia sesión'}
             </Text>
           </AnimatedButton>
+
+          {isLogin && (
+            <AnimatedButton
+              style={styles.forgotLink}
+              onPress={() => router.push('/forgot-password')}
+              disabled={loading}
+            >
+              <Text style={styles.forgotLinkText}>¿Olvidaste tu contraseña?</Text>
+            </AnimatedButton>
+          )}
         </View>
       </AnimatedCard>
     </ScrollView>
@@ -209,6 +219,16 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     ...TYPOGRAPHY.button,
+  },
+  forgotLink: {
+    marginTop: SPACING.lg,
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+  },
+  forgotLinkText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
   },
   switchButton: {
     marginTop: SPACING.xl,
